@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Airport Forecast Board · METAR + Forecast + TFX</title>
+  <style>
+    :root {
+      --bg: #0b0f14; --surface: #141a22; --surface2: #1c2430; --border: #2a3544;
+      --text: #e8eef6; --muted: #8b9bb4; --accent: #3b82f6; --good: #22c55e;
+      --warn: #eab308; --bad: #ef4444;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    body { display: flex; flex-direction: column; min-height: 100vh; }
+    header {
+      background: #0f1520; border-bottom: 1px solid var(--border); padding: 6px 14px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0;
+    }
+    header h1 { font-size: 1.05rem; font-weight: 600; }
+    .controls { display: flex; align-items: center; gap: 10px; }
+    button {
+      background: var(--accent); color: #fff; border: none; padding: 7px 14px;
+      border-radius: 6px; font-size: 0.88rem; cursor: pointer;
+    }
+    button:disabled { opacity: 0.5; }
+    .status { font-size: 0.82rem; color: var(--muted); }
+    .status.error { color: var(--bad); }
+    main { flex: 1; }
+    .loading { text-align: center; padding: 40px; color: var(--muted); }
+
+    .airport { border-bottom: 1px solid var(--border); background: var(--surface); }
+    .airport.alert-high { animation: police-red 0.9s infinite; border-left: 6px solid #ef4444; }
+    .airport.alert-medium { animation: police-amber 1.1s infinite; border-left: 6px solid #eab308; }
+    @keyframes police-red {
+      0%, 100% { background: #1f0a0a; box-shadow: inset 0 0 0 4px #ef4444; }
+      50% { background: #3b1010; box-shadow: inset 0 0 0 6px #ff1a1a; }
+    }
+    @keyframes police-amber {
+      0%, 100% { background: #1f1a08; box-shadow: inset 0 0 0 4px #eab308; }
+      50% { background: #3b3010; box-shadow: inset 0 0 0 6px #facc15; }
+    }
+    .airport-header {
+      background: var(--surface2); padding: 7px 12px; font-weight: 600; font-size: 1.1rem;
+      border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
+    }
+    .airport-header .left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .icao { color: var(--accent); font-size: 1.15rem; flex-shrink: 0; }
+    .name { color: #fff; font-weight: 400; flex-shrink: 0; white-space: nowrap; }
+    .flight-status {
+      flex: 1; min-width: 100px; overflow: hidden; height: 1.8em; position: relative;
+      margin-left: 8px; border-radius: 4px; background: rgba(0,0,0,0.2);
+    }
+    .flight-track {
+      display: inline-flex; gap: 28px; white-space: nowrap; height: 100%; align-items: center;
+      padding: 0 8px; width: max-content; animation: marquee 28s linear infinite;
+    }
+    @keyframes marquee {
+      0% { transform: translateX(-50%); }
+      100% { transform: translateX(0%); }
+    }
+    .fs-item {
+      display: inline-block; padding: 2px 10px; border-radius: 4px; font-size: 0.88rem; font-weight: 600;
+      border: 1px solid rgba(56,189,248,0.35); background: rgba(14,165,233,0.12); color: #7dd3fc;
+    }
+    .fs-arriving { color: #86efac; border-color: rgba(74,222,128,0.45); background: rgba(22,163,74,0.15); }
+    .fs-leaving { color: #fde68a; border-color: rgba(250,204,21,0.45); background: rgba(202,138,4,0.15); }
+    .fs-near { color: #cbd5e1; }
+
+    .metar-strip { background: #0d1219; border-bottom: 1px solid var(--border); padding: 5px 12px; font-size: 0.82rem; }
+    .metar-decoded { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+    .metar-item strong { color: var(--muted); font-weight: 500; margin-right: 4px; }
+    .metar-raw { font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+
+    .timeline { display: flex; overflow-x: auto; padding: 4px 6px 6px; gap: 3px; }
+    .slot {
+      flex: 0 0 180px; min-height: 120px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 7px; text-align: center; font-size: 0.9rem;
+    }
+    .slot.now { border-color: var(--accent); }
+    .slot.alert-high { animation: box-red 0.9s infinite; border-width: 3px; }
+    .slot.alert-medium { animation: box-amber 1.1s infinite; border-width: 3px; }
+    @keyframes box-red {
+      0%, 100% { border-color: #ef4444; background: #1a0a0a; }
+      50% { border-color: #ff2020; background: #2f0c0c; }
+    }
+    @keyframes box-amber {
+      0%, 100% { border-color: #eab308; background: #1a1608; }
+      50% { border-color: #facc15; background: #2f280c; }
+    }
+    .slot-time { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+    .wx-icon { font-size: 1.6rem; display: block; margin: 2px 0; }
+    .wind-row { font-weight: 600; font-size: 1.05rem; }
+    .wind.low { color: var(--good); } .wind.med { color: var(--warn); } .wind.high { color: var(--bad); }
+    .gust { font-size: 0.8rem; color: var(--muted); }
+    .temp-row { margin-top: 4px; }
+    .dew { color: var(--muted); font-size: 0.78rem; }
+    .vis { font-size: 0.85rem; margin-top: 3px; }
+    .vis.poor { color: var(--bad); font-weight: 600; }
+    .cloud { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    .warn-text { margin-top: 4px; font-size: 0.72rem; font-weight: 700; padding: 2px 4px; border-radius: 3px; }
+    .warn-text.high { background: rgba(239,68,68,0.25); color: #fca5a5; }
+    .warn-text.medium { background: rgba(234,179,8,0.22); color: #fde68a; }
+
+    footer {
+      padding: 4px 12px; border-top: 1px solid var(--border); font-size: 0.72rem; color: var(--muted);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Airport Forecast Board · METAR + 24–48 h · TFX track</h1>
+    <div class="controls">
+      <span class="status" id="status">Loading…</span>
+      <button id="refreshBtn" type="button">Refresh</button>
+    </div>
+  </header>
+  <main id="content"><div class="loading">Loading…</div></main>
+  <footer>
+    <span>Weather: browser (Open-Meteo / METAR). Flights: Cloudflare Worker · ZK-TXA–TXF within 200 km. Not for operational use.</span>
+    <span id="lastUpdated"></span>
+  </footer>
+
+  <script>
+    const AIRPORTS = [
+      { iata: "BNE", icao: "YBBN", name: "Brisbane", lat: -27.3842, lon: 153.1170, tz: "Australia/Brisbane" },
+      { iata: "MEL", icao: "YMML", name: "Melbourne", lat: -37.6733, lon: 144.8433, tz: "Australia/Melbourne" },
+      { iata: "SYD", icao: "YSSY", name: "Sydney", lat: -33.9461, lon: 151.1772, tz: "Australia/Sydney" },
+      { iata: "ADL", icao: "YPAD", name: "Adelaide", lat: -34.9450, lon: 138.5306, tz: "Australia/Adelaide" },
+      { iata: "PER", icao: "YPPH", name: "Perth", lat: -31.9403, lon: 115.9669, tz: "Australia/Perth" },
+      { iata: "CNS", icao: "YBCS", name: "Cairns", lat: -16.8858, lon: 145.7553, tz: "Australia/Brisbane" },
+      { iata: "DRW", icao: "YPDN", name: "Darwin", lat: -12.4147, lon: 130.8766, tz: "Australia/Darwin" },
+      { iata: "NLK", icao: "YSNF", name: "Norfolk Island", lat: -29.0417, lon: 167.9383, tz: "Pacific/Norfolk" },
+      { iata: "LST", icao: "YMLT", name: "Launceston", lat: -41.5453, lon: 147.2142, tz: "Australia/Hobart" },
+      { iata: "AKL", icao: "NZAA", name: "Auckland", lat: -37.0081, lon: 174.7920, tz: "Pacific/Auckland" },
+      { iata: "CHC", icao: "NZCH", name: "Christchurch", lat: -43.4894, lon: 172.5320, tz: "Pacific/Auckland" },
+      { iata: "PMR", icao: "NZPM", name: "Palmerston North", lat: -40.3206, lon: 175.6170, tz: "Pacific/Auckland" }
+    ];
+    const STEP = 3;
+    const ALERT_HOURS = 18;
+
+    function wxIcon(code) {
+      if (code == null) return { icon: "❓", label: "" };
+      if (code === 0) return { icon: "☀️", label: "Clear" };
+      if (code === 1) return { icon: "🌤️", label: "Mainly clear" };
+      if (code === 2) return { icon: "⛅", label: "Partly cloudy" };
+      if (code === 3) return { icon: "☁️", label: "Overcast" };
+      if (code === 45 || code === 48) return { icon: "🌫️", label: "Fog" };
+      if (code >= 51 && code <= 57) return { icon: "🌦️", label: "Drizzle" };
+      if (code >= 61 && code <= 67) return { icon: "🌧️", label: "Rain" };
+      if (code >= 71 && code <= 77) return { icon: "🌨️", label: "Snow" };
+      if (code >= 80 && code <= 82) return { icon: "🌦️", label: "Showers" };
+      if (code >= 95) return { icon: "⛈️", label: "Thunder" };
+      return { icon: "☁️", label: "" };
+    }
+
+    function evaluateSlot(code, spd, gust, vis, precipProb, lowCloud) {
+      const warnings = [];
+      let level = null;
+      if (typeof vis === "number" && vis < 1000) { warnings.push("Vis <1000m"); level = "high"; }
+      if (spd != null && spd >= 35) { warnings.push("Wind " + Math.round(spd) + "kt"); level = "high"; }
+      if (gust != null && gust >= 45) { warnings.push("Gust " + Math.round(gust) + "kt"); level = "high"; }
+      if (code >= 95) { warnings.push("Thunderstorm"); level = "high"; }
+      if (code === 65 || code === 82) { warnings.push("Heavy rain"); level = "high"; }
+      if (code === 45 || code === 48) { warnings.push("Fog"); level = "high"; }
+      if (!level) {
+        if (gust != null && spd != null && gust - spd >= 18) { warnings.push("Large gust spread"); level = "medium"; }
+        if (lowCloud != null && lowCloud > 70 && typeof vis === "number" && vis < 5000) {
+          warnings.push(Math.round(lowCloud) + "% low cloud"); level = "medium";
+        }
+      }
+      return { warnings, level };
+    }
+
+    function windClass(kn) {
+      if (kn == null) return "";
+      if (kn < 15) return "low";
+      if (kn < 25) return "med";
+      return "high";
+    }
+
+    function airportTimes(tz) {
+      const now = new Date();
+      return {
+        local: now.toLocaleTimeString("en-AU", { timeZone: tz, hour: "2-digit", minute: "2-digit", hour12: false }),
+        utc: now.toLocaleTimeString("en-AU", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false })
+      };
+    }
+
+    function slotLabel(iso, tz) {
+      const d = new Date(iso.includes("Z") || iso.includes("+") ? iso : iso + ":00Z");
+      // Open-Meteo times are local when timezone=auto per location — treat as local wall clock in tz
+      const localHm = iso.length >= 16 ? iso.slice(11, 16) : "--:--";
+      let zulu = "--:--";
+      try {
+        const [y, mo, day] = iso.slice(0, 10).split("-").map(Number);
+        const [hh, mm] = localHm.split(":").map(Number);
+        let utcMs = Date.UTC(y, mo - 1, day, hh, mm, 0);
+        const fmt = new Intl.DateTimeFormat("en-AU", {
+          timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit",
+          hour: "2-digit", minute: "2-digit", hour12: false
+        });
+        const parts = Object.fromEntries(fmt.formatToParts(new Date(utcMs)).map(p => [p.type, p.value]));
+        const asLocal = Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, 0);
+        const trueUtc = new Date(utcMs - (asLocal - utcMs));
+        zulu = trueUtc.toLocaleTimeString("en-AU", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false });
+      } catch (_) {}
+      const dayName = new Date(iso.slice(0, 10) + "T12:00:00Z").toLocaleDateString("en-AU", { weekday: "short", timeZone: "UTC" });
+      return dayName + " " + localHm + " (" + zulu + "Z)";
+    }
+
+    async function fetchMetar(icao) {
+      try {
+        const res = await fetch("https://rotatepilot.com/api/v1/metar?icao=" + icao + "&taf=1");
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.raw) return data;
+        }
+      } catch (_) {}
+      try {
+        const res = await fetch("https://metar.vatsim.net/" + icao);
+        if (res.ok) {
+          const raw = (await res.text()).trim();
+          if (raw.length > 10) return { raw, icao, reportTime: new Date().toISOString() };
+        }
+      } catch (_) {}
+      return null;
+    }
+
+    async function fetchForecast() {
+      const batchSize = 4;
+      const out = new Array(AIRPORTS.length);
+      for (let i = 0; i < AIRPORTS.length; i += batchSize) {
+        const batch = AIRPORTS.slice(i, i + batchSize);
+        const params = new URLSearchParams({
+          latitude: batch.map(a => a.lat).join(","),
+          longitude: batch.map(a => a.lon).join(","),
+          hourly: "temperature_2m,dew_point_2m,precipitation_probability,weather_code,cloud_cover,cloud_cover_low,visibility,wind_speed_10m,wind_direction_10m,wind_gusts_10m",
+          wind_speed_unit: "kn",
+          timezone: "auto",
+          forecast_days: "3"
+        });
+        let data = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            if (attempt) await new Promise(r => setTimeout(r, 800 * attempt));
+            const res = await fetch("https://api.open-meteo.com/v1/forecast?" + params);
+            if (res.status === 429) continue;
+            if (!res.ok) throw new Error("OM " + res.status);
+            data = await res.json();
+            break;
+          } catch (_) {}
+        }
+        const arr = data ? (Array.isArray(data) ? data : [data]) : batch.map(() => null);
+        arr.forEach((d, j) => { out[i + j] = d; });
+      }
+      // met.no backup per airport if missing
+      for (let i = 0; i < out.length; i++) {
+        if (out[i] && out[i].hourly) continue;
+        try {
+          const ap = AIRPORTS[i];
+          const res = await fetch(
+            "https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=" + ap.lat + "&lon=" + ap.lon,
+            { headers: { "User-Agent": "airport-forecast-board/1.0" } }
+          );
+          if (res.ok) out[i] = { _metno: await res.json() };
+        } catch (_) {}
+      }
+      return out;
+    }
+
+    async function fetchFlights() {
+      try {
+        const res = await fetch("/api/flights?t=" + Date.now(), { cache: "no-store" });
+        if (!res.ok) return { byAirport: {} };
+        return await res.json();
+      } catch (_) {
+        return { byAirport: {} };
+      }
+    }
+
+    function slotsFromOpenMeteo(fc, ap, now) {
+      const slots = [];
+      if (!fc || !fc.hourly) return slots;
+      const h = fc.hourly;
+      let start = 0;
+      for (let i = 0; i < h.time.length; i++) {
+        if (new Date(h.time[i]).getTime() >= now - 30 * 60 * 1000) { start = i; break; }
+      }
+      const cutoff = now + ALERT_HOURS * 3600 * 1000;
+      let rowLevel = null;
+      for (let i = start, n = 0; i < h.time.length && n < 10; i += STEP, n++) {
+        const t = h.time[i];
+        const tMs = new Date(t).getTime();
+        const code = h.weather_code[i];
+        const spd = h.wind_speed_10m[i];
+        const gust = h.wind_gusts_10m[i];
+        const vis = h.visibility[i];
+        const lowCloud = h.cloud_cover_low[i];
+        const precip = h.precipitation_probability ? h.precipitation_probability[i] : null;
+        const ev = evaluateSlot(code, spd, gust, vis, precip, lowCloud);
+        if (ev.level === "high" && tMs <= cutoff) rowLevel = "high";
+        else if (ev.level === "medium" && tMs <= cutoff && rowLevel !== "high") rowLevel = "medium";
+        const wx = wxIcon(code);
+        slots.push({
+          label: slotLabel(t, ap.tz),
+          nearNow: Math.abs(tMs - now) < 90 * 60 * 1000,
+          icon: wx.icon,
+          wind: spd != null ? Math.round(spd) : null,
+          windDir: h.wind_direction_10m[i],
+          gust: gust != null ? Math.round(gust) : null,
+          temp: h.temperature_2m[i] != null ? Math.round(h.temperature_2m[i]) : null,
+          dew: h.dew_point_2m[i] != null ? Math.round(h.dew_point_2m[i]) : null,
+          vis: typeof vis === "number" ? (vis >= 10000 ? "10000m+" : Math.round(vis) + "m") : "—",
+          visM: typeof vis === "number" ? vis : null,
+          cloud: h.cloud_cover[i] != null ? Math.round(h.cloud_cover[i]) : null,
+          lowCloud: lowCloud != null ? Math.round(lowCloud) : null,
+          warnings: ev.warnings,
+          level: ev.level
+        });
+      }
+      return { slots, rowLevel };
+    }
+
+    function slotsFromMetNo(data, ap, now) {
+      const ts = (((data || {}).properties || {}).timeseries) || [];
+      const slots = [];
+      let rowLevel = null;
+      for (let i = 0; i < ts.length && slots.length < 10; i++) {
+        const pt = ts[i];
+        const tMs = new Date(pt.time).getTime();
+        if (tMs < now - 30 * 60 * 1000) continue;
+        if (slots.length) {
+          const last = new Date(slots[slots.length - 1]._iso).getTime();
+          if (tMs - last < 2.5 * 3600 * 1000) continue;
+        }
+        const det = (pt.data.instant || {}).details || {};
+        const next = pt.data.next_1_hours || pt.data.next_6_hours || {};
+        const symbol = ((next.summary || {}).symbol_code) || "";
+        let code = 3, icon = "☁️";
+        if (symbol.includes("clearsky")) { code = 0; icon = "☀️"; }
+        else if (symbol.includes("fair")) { code = 1; icon = "🌤️"; }
+        else if (symbol.includes("partlycloudy")) { code = 2; icon = "⛅"; }
+        else if (symbol.includes("fog")) { code = 45; icon = "🌫️"; }
+        else if (symbol.includes("thunder")) { code = 95; icon = "⛈️"; }
+        else if (symbol.includes("rain")) { code = 63; icon = "🌧️"; }
+        const spd = det.wind_speed != null ? det.wind_speed * 1.94384 : null;
+        const cloud = det.cloud_area_fraction != null ? Math.round(det.cloud_area_fraction) : null;
+        const ev = evaluateSlot(code, spd, null, null, null, cloud);
+        if (ev.level === "high") rowLevel = "high";
+        else if (ev.level === "medium" && rowLevel !== "high") rowLevel = "medium";
+        const utc = new Date(pt.time);
+        const localHm = utc.toLocaleTimeString("en-AU", { timeZone: ap.tz, hour: "2-digit", minute: "2-digit", hour12: false });
+        const day = utc.toLocaleDateString("en-AU", { timeZone: ap.tz, weekday: "short" });
+        const zulu = utc.toLocaleTimeString("en-AU", { timeZone: "UTC", hour: "2-digit", minute: "2-digit", hour12: false });
+        slots.push({
+          _iso: pt.time,
+          label: day + " " + localHm + " (" + zulu + "Z)",
+          nearNow: Math.abs(tMs - now) < 90 * 60 * 1000,
+          icon,
+          wind: spd != null ? Math.round(spd) : null,
+          windDir: det.wind_from_direction != null ? Math.round(det.wind_from_direction) : null,
+          gust: null,
+          temp: det.air_temperature != null ? Math.round(det.air_temperature) : null,
+          dew: null,
+          vis: "—",
+          visM: null,
+          cloud,
+          lowCloud: cloud,
+          warnings: ev.warnings,
+          level: ev.level
+        });
+      }
+      return { slots, rowLevel };
+    }
+
+    function render(metars, forecasts, flightData) {
+      const now = Date.now();
+      let html = "";
+      for (let idx = 0; idx < AIRPORTS.length; idx++) {
+        const ap = AIRPORTS[idx];
+        const times = airportTimes(ap.tz);
+        const raw = metars[idx];
+        const fc = forecasts[idx];
+        let built = { slots: [], rowLevel: null };
+        if (fc && fc.hourly) built = slotsFromOpenMeteo(fc, ap, now);
+        else if (fc && fc._metno) built = slotsFromMetNo(fc._metno, ap, now);
+
+        const flights = (flightData.byAirport && flightData.byAirport[ap.iata]) || [];
+        const rowClass = built.rowLevel === "high" ? "alert-high" : built.rowLevel === "medium" ? "alert-medium" : "";
+
+        html += '<div class="airport ' + rowClass + '"><div class="airport-header"><div class="left">';
+        html += '<span class="icao">' + ap.iata + ' / ' + ap.icao + '</span>';
+        html += '<span class="name">' + ap.name + '</span>';
+        html += '<span class="name">' + times.local + ' <span style="opacity:0.85;color:#e2e8f0;">(' + times.utc + ' UTC)</span></span>';
+        html += '<span class="flight-status">';
+        if (flights.length) {
+          html += '<span class="flight-track">';
+          const seq = [];
+          while (seq.length < Math.max(6, flights.length * 3)) for (const f of flights) seq.push(f);
+          for (const f of seq) {
+            let cls = "fs-near";
+            let emoji = "✈️";
+            if (f.direction === "ARRIVING") { cls = "fs-arriving"; emoji = "🛬"; }
+            else if (f.direction === "LEAVING") { cls = "fs-leaving"; emoji = "🛫"; }
+            else if (f.direction === "AT FIELD") { emoji = "🅿️"; }
+            // Registration always; add callsign/flight number when different
+            var id = f.reg || "";
+            var cs = (f.callsign || "").replace(/\s+/g, "");
+            if (cs && cs !== id.replace("-", "") && cs !== id) {
+              id = cs + " " + (f.reg || "");
+            }
+            html += '<span class="fs-item ' + cls + '">' + emoji + ' ' + id + ' ' + f.altitude +
+              ' ' + f.km + 'km ' + f.direction + ' ' + (f.airport || "") + '</span>';
+          }
+          html += '</span>';
+        }
+        html += '</span></div></div>';
+
+        if (raw && raw.raw) {
+          const temp = raw.temperatureC ?? raw.temp;
+          const dewp = raw.dewpointC ?? raw.dewp;
+          const wdir = raw.windDir ?? raw.wdir;
+          const wspd = raw.windSpeedKt ?? raw.wspd;
+          const wgst = raw.windGustKt ?? raw.wgst;
+          let qnh = raw.altimeterInHg ?? raw.altimeter ?? raw.qnh;
+          if (qnh != null) qnh = qnh > 50 ? Math.round(qnh) : Math.round(qnh * 33.8639);
+          html += '<div class="metar-strip"><div class="metar-decoded">';
+          html += '<span class="metar-item"><strong>Wind</strong>' + (wdir != null ? wdir : "VRB") + '° ' + (wspd != null ? wspd : "—") + 'kt' + (wgst ? " G" + wgst : "") + '</span>';
+          html += '<span class="metar-item"><strong>Temp/Dew</strong>' + (temp != null ? Math.round(temp) : "—") + '° / ' + (dewp != null ? Math.round(dewp) : "—") + '°</span>';
+          html += '<span class="metar-item"><strong>QNH</strong>' + (qnh != null ? qnh : "—") + '</span>';
+          html += '</div><div class="metar-raw">' + (raw.raw || "") + '</div></div>';
+        } else {
+          html += '<div class="metar-strip"><div class="metar-decoded"><span class="metar-item">No recent METAR</span></div></div>';
+        }
+
+        html += '<div class="timeline">';
+        if (!built.slots.length) {
+          html += '<div class="slot" style="min-width:200px;color:var(--muted);">Forecast unavailable</div>';
+        } else {
+          for (const s of built.slots) {
+            let sc = s.nearNow ? "now" : "";
+            if (s.level === "high") sc += " alert-high";
+            else if (s.level === "medium") sc += " alert-medium";
+            const warn = s.warnings && s.warnings.length
+              ? '<div class="warn-text ' + s.level + '">' + s.warnings.join(" · ") + '</div>' : "";
+            html += '<div class="slot ' + sc + '">';
+            html += '<div class="slot-time">' + s.label + '</div>';
+            html += '<span class="wx-icon">' + (s.icon || "☁️") + '</span>';
+            html += '<div class="wind-row wind ' + windClass(s.wind) + '">' + (s.wind != null ? s.wind : "—") + '</div>';
+            html += '<div class="gust">G ' + (s.gust != null ? s.gust : "—") + '</div>';
+            html += '<div class="temp-row">' + (s.temp != null ? s.temp : "—") + '° <span class="dew">/ ' + (s.dew != null ? s.dew : "—") + '°</span></div>';
+            html += '<div class="vis ' + (s.visM != null && s.visM < 3000 ? "poor" : "") + '">' + (s.vis || "—") + '</div>';
+            html += '<div class="cloud">' + (s.cloud != null ? s.cloud : "—") + '% clouds</div>';
+            html += warn + '</div>';
+          }
+        }
+        html += '</div></div>';
+      }
+      document.getElementById("content").innerHTML = html;
+    }
+
+    async function loadAll() {
+      const btn = document.getElementById("refreshBtn");
+      const status = document.getElementById("status");
+      btn.disabled = true;
+      status.textContent = "Updating…";
+      status.classList.remove("error");
+      try {
+        const [metars, forecasts, flights] = await Promise.all([
+          Promise.all(AIRPORTS.map(a => fetchMetar(a.icao))),
+          fetchForecast(),
+          fetchFlights()
+        ]);
+        render(metars, forecasts, flights);
+        document.getElementById("lastUpdated").textContent =
+          "Updated " + new Date().toLocaleString("en-AU", { weekday: "short", hour: "2-digit", minute: "2-digit" });
+        status.textContent = "Live";
+        setTimeout(setupScroll, 400);
+      } catch (e) {
+        console.error(e);
+        status.textContent = "Error";
+        status.classList.add("error");
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    let scrollPaused = false, oneCopyHeight = 0;
+    function setupScroll() {
+      const main = document.getElementById("content");
+      const old = document.getElementById("content-clone");
+      if (old) old.remove();
+      const clone = main.cloneNode(true);
+      clone.id = "content-clone";
+      clone.setAttribute("aria-hidden", "true");
+      clone.style.pointerEvents = "none";
+      main.after(clone);
+      oneCopyHeight = main.offsetHeight;
+    }
+    setInterval(() => {
+      if (scrollPaused || oneCopyHeight <= 0) return;
+      window.scrollBy(0, 0.8);
+      if (window.scrollY >= oneCopyHeight) window.scrollTo({ top: window.scrollY - oneCopyHeight, behavior: "instant" });
+    }, 25);
+    window.addEventListener("wheel", () => {
+      scrollPaused = true;
+      clearTimeout(window._rt);
+      window._rt = setTimeout(() => { scrollPaused = false; }, 8000);
+    }, { passive: true });
+
+    async function wake() {
+      try { if ("wakeLock" in navigator) await navigator.wakeLock.request("screen"); } catch (_) {}
+    }
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible") wake(); });
+    wake();
+
+    document.getElementById("refreshBtn").onclick = loadAll;
+    loadAll();
+    setInterval(loadAll, 5 * 60 * 1000);
+  </script>
+</body>
+</html>
