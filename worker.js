@@ -43,15 +43,24 @@ async function fetchJson(url, timeoutMs = 4000) {
   }
 }
 
-function json(data, status = 200, maxAge = 60) {
+function json(data, status = 200, maxAge = 0) {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json",
       "Access-Control-Allow-Origin": "*",
-      "Cache-Control": `public, max-age=${maxAge}`,
+      "Cache-Control": maxAge > 0 ? `public, max-age=${maxAge}` : "no-store, no-cache, must-revalidate",
+      Pragma: "no-cache",
     },
   });
+}
+
+function noStore(res) {
+  const headers = new Headers(res.headers);
+  headers.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+  headers.set("Pragma", "no-cache");
+  headers.set("Expires", "0");
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
 }
 
 function haversineKm(lat1, lon1, lat2, lon2) {
@@ -591,13 +600,20 @@ export default {
     }
     if (url.pathname === "/api/weather" || url.pathname === "/api/weather/") {
       try {
-        return json(await buildWeather(), 200, 30);
+        return json(await buildWeather(), 200, 0);
       } catch (e) {
         if (lastGoodWeather) return json({ ...lastGoodWeather, warnings: [...(lastGoodWeather.warnings || []), String(e.message || e)] }, 200, 10);
         return json({ error: String(e.message || e), tafDown: true, airports: [] }, 200, 10);
       }
     }
-    if (env.ASSETS) return env.ASSETS.fetch(request);
+    if (env.ASSETS) {
+      const res = await env.ASSETS.fetch(request);
+      const dest = request.headers.get("Sec-Fetch-Dest") || "";
+      if (url.pathname === "/" || url.pathname.endsWith(".html") || dest === "document") {
+        return noStore(res);
+      }
+      return res;
+    }
     return new Response("Not found", { status: 404 });
   },
 };

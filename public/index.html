@@ -4,6 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Airport weather board</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <meta http-equiv="Pragma" content="no-cache" />
+  <meta http-equiv="Expires" content="0" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" />
   <style>
@@ -336,7 +339,18 @@
       const ms = failed ? 15 * 1000 : anyTafDown ? 2 * 60 * 1000 : 5 * 60 * 1000;
       setTimeout(async () => { await load(); schedule(); }, ms);
     }
-    setTimeout(() => location.reload(), 5 * 60 * 1000);
+    async function hardRefresh() {
+      try {
+        if (window.caches) {
+          const keys = await caches.keys();
+          await Promise.all(keys.map((k) => caches.delete(k)));
+        }
+      } catch (_) {}
+      const url = new URL(location.href);
+      url.searchParams.set("r", String(Date.now()));
+      location.replace(url.toString());
+    }
+    setTimeout(hardRefresh, 5 * 60 * 1000);
     (function scroll() {
       const root = document.querySelector(".track");
       const tick = () => {
