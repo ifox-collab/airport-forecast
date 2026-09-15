@@ -6,18 +6,18 @@
 const REGS = ["ZK-TXA", "ZK-TXB", "ZK-TXC", "ZK-TXD", "ZK-TXE", "ZK-TXF"];
 
 const AIRPORTS = [
-  { iata: "BNE", icao: "YBBN", name: "Brisbane", lat: -27.3842, lon: 153.1175, tz: "Australia/Brisbane", runways: [{ ident: "01/19", heading: 14 }, { ident: "14/32", heading: 136 }] },
+  { iata: "BNE", icao: "YBBN", name: "Brisbane", lat: -27.3842, lon: 153.1175, tz: "Australia/Brisbane", runways: [{ ident: "01/19", heading: 14 }] },
   { iata: "MEL", icao: "YMML", name: "Melbourne", lat: -37.6733, lon: 144.8433, tz: "Australia/Melbourne", runways: [{ ident: "09/27", heading: 94 }, { ident: "16/34", heading: 159 }] },
   { iata: "SYD", icao: "YSSY", name: "Sydney", lat: -33.9461, lon: 151.1772, tz: "Australia/Sydney", runways: [{ ident: "07/25", heading: 74 }, { ident: "16/34", heading: 155 }] },
-  { iata: "ADL", icao: "YPAD", name: "Adelaide", lat: -34.945, lon: 138.5306, tz: "Australia/Adelaide", runways: [{ ident: "05/23", heading: 48 }, { ident: "12/30", heading: 116 }] },
+  { iata: "ADL", icao: "YPAD", name: "Adelaide", lat: -34.945, lon: 138.5306, tz: "Australia/Adelaide", runways: [{ ident: "05/23", heading: 48 }] },
   { iata: "PER", icao: "YPPH", name: "Perth", lat: -31.9403, lon: 115.9669, tz: "Australia/Perth", runways: [{ ident: "03/21", heading: 21 }, { ident: "06/24", heading: 57 }] },
   { iata: "CNS", icao: "YBCS", name: "Cairns", lat: -16.8858, lon: 145.7553, tz: "Australia/Brisbane", runways: [{ ident: "15/33", heading: 146 }] },
-  { iata: "DRW", icao: "YPDN", name: "Darwin", lat: -12.4147, lon: 130.8767, tz: "Australia/Darwin", runways: [{ ident: "11/29", heading: 114 }, { ident: "18/36", heading: 177 }] },
-  { iata: "NLK", icao: "YSNF", name: "Norfolk Island", lat: -29.0416, lon: 167.9387, tz: "Pacific/Norfolk", runways: [{ ident: "04/22", heading: 29 }, { ident: "11/29", heading: 112 }] },
-  { iata: "AKL", icao: "NZAA", name: "Auckland", lat: -37.0082, lon: 174.785, tz: "Pacific/Auckland", runways: [{ ident: "04/22", heading: 45 }, { ident: "05/23", heading: 51 }] },
-  { iata: "CHC", icao: "NZCH", name: "Christchurch", lat: -43.4894, lon: 172.532, tz: "Pacific/Auckland", runways: [{ ident: "02/20", heading: 20 }, { ident: "11/29", heading: 110 }] },
+  { iata: "DRW", icao: "YPDN", name: "Darwin", lat: -12.4147, lon: 130.8767, tz: "Australia/Darwin", runways: [{ ident: "11/29", heading: 114 }] },
+  { iata: "NLK", icao: "YSNF", name: "Norfolk Island", lat: -29.0416, lon: 167.9387, tz: "Pacific/Norfolk", runways: [{ ident: "04/22", heading: 29 }] },
+  { iata: "AKL", icao: "NZAA", name: "Auckland", lat: -37.0082, lon: 174.785, tz: "Pacific/Auckland", runways: [{ ident: "05/23", heading: 51 }] },
+  { iata: "CHC", icao: "NZCH", name: "Christchurch", lat: -43.4894, lon: 172.532, tz: "Pacific/Auckland", runways: [{ ident: "02/20", heading: 20 }] },
   { iata: "PMR", icao: "NZPM", name: "Palmerston North", lat: -40.3206, lon: 175.617, tz: "Pacific/Auckland", runways: [{ ident: "07/25", heading: 73 }] },
-  { iata: "LST", icao: "YMLT", name: "Launceston", lat: -41.5453, lon: 147.2144, tz: "Australia/Hobart", runways: [{ ident: "14/32", heading: 137 }, { ident: "18/36", heading: 177 }] },
+  { iata: "LST", icao: "YMLT", name: "Launceston", lat: -41.5453, lon: 147.2144, tz: "Australia/Hobart", runways: [{ ident: "14/32", heading: 137 }] },
 ];
 
 const ICAO_LIST = AIRPORTS.map((a) => a.icao).join(",");
