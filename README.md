@@ -1,26 +1,19 @@
 # Airport Forecast Board (Cloudflare)
 
-Weather every **5 minutes** in the browser (free).  
-Flights via a light **Cloudflare Worker**: registrations **ZK-TXA … ZK-TXF** within **200 km** of watched airports, with altitude and ARRIVING / LEAVING.
+Same repository. Same Cloudflare project. New board.
 
-## Deploy (Cloudflare)
+- Official METAR / TAF (AWC), NOAA METAR backup
+- TEMPO / PROB flashing
+- Wind roses, live clock, 3-hour boxes
+- ZK-TXA … ZK-TXF within **400 km** (callsign if squawking, else rego; **on ground** when on the ground)
+- Browser refresh every **5 minutes**; TAF down retries every **2 minutes**
 
-1. Install Wrangler: `npm i -g wrangler`
-2. Login: `wrangler login`
-3. From this folder: `wrangler deploy`
-4. Open the `*.workers.dev` URL (or attach a custom domain)
+## Deploy
 
-### What gets deployed
-- `public/index.html` — board UI + weather (Open-Meteo, METAR, met.no backup)
-- `worker.js` — `/api/flights` only (6 registrations, 200 km)
+From this folder:
 
-## Airports
-BNE, MEL, SYD, ADL, PER, CNS, DRW, NLK, LST, AKL, CHC, PMR
+```
+npx wrangler deploy
+```
 
-## Flight strip example
-`🛬 TNZ74 FL210 42km ARRIVING CHC`
-
-## Free tier notes
-- Weather does **not** use Worker compute (browser only)
-- Flights Worker: few upstream calls (≤ ~12), fine on Workers Free for one TV
-- Refresh: every 5 minutes
+Cloudflare already watching this repo will pick up the push to `main`.
