@@ -297,7 +297,12 @@
         const mm = String(t.getUTCMinutes()).padStart(2,"0");
         upd.textContent = `Updated ${hh}:${mm} UTC · ${weather.tafDown ? "TAF down · retry 2 min · METAR live" : "refresh 5 min · official TAF / METAR"}`;
       }
-      document.getElementById("banner").hidden = !weather?.tafDown;
+      const anyDown = !!(weather?.tafDown || (weather?.airports || []).some((a) => a.tafDown));
+      const banner = document.getElementById("banner");
+      banner.hidden = !anyDown;
+      if (anyDown) {
+        banner.textContent = weather?.tafDown ? "TAF down — retrying every 2 minutes" : "TAF down at one airport — model forecast in use";
+      }
       tickClocks();
     }
 
@@ -307,20 +312,28 @@
           fetch("/api/weather?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()),
           fetch("/api/flights?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()).catch(() => ({ byAirport: {} })),
         ]);
+        if (!w?.airports?.length) throw new Error(w?.error || "weather payload missing");
         weather = w;
         flights = f;
-        if (!w?.airports) throw new Error(w?.error || "weather payload missing");
+        const banner = document.getElementById("banner");
+        const anyDown = !!(w.tafDown || w.airports.some((a) => a.tafDown));
+        banner.hidden = !anyDown;
+        banner.textContent = w.tafDown ? "TAF down — retrying every 2 minutes" : "TAF down at one airport — model forecast in use";
         paint();
       } catch (e) {
+        document.getElementById("banner").hidden = false;
+        document.getElementById("banner").textContent = "Weather feed error — retrying";
         document.getElementById("updated").textContent = "Could not load weather";
+        if (!weather) weather = { tafDown: true, airports: [] };
       }
     }
 
     document.getElementById("refresh").onclick = () => load();
     setInterval(tickClocks, 1000);
     function schedule() {
-      const anyTafDown = !!(weather?.tafDown || (weather?.airports || []).some((a) => a.tafDown));
-      const ms = anyTafDown ? 2 * 60 * 1000 : 5 * 60 * 1000;
+      const failed = !weather?.airports?.length;
+      const anyTafDown = failed || !!(weather?.tafDown || (weather?.airports || []).some((a) => a.tafDown));
+      const ms = failed ? 15 * 1000 : anyTafDown ? 2 * 60 * 1000 : 5 * 60 * 1000;
       setTimeout(async () => { await load(); schedule(); }, ms);
     }
     setTimeout(() => location.reload(), 5 * 60 * 1000);

@@ -24,6 +24,25 @@ const ICAO_LIST = AIRPORTS.map((a) => a.icao).join(",");
 const UA = "airport-forecast-board/2.0";
 const RADIUS_KM = 400;
 
+let lastGoodWeather = null;
+
+async function fetchJson(url, timeoutMs = 4000) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": UA },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (_) {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function json(data, status = 200, maxAge = 60) {
   return new Response(JSON.stringify(data), {
     status,
@@ -410,16 +429,11 @@ function metarFromModel(icao, cond) {
 }
 
 async function fetchMetNoSeries(lat, lon) {
-  try {
-    const res = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${lat}&lon=${lon}`, {
-      headers: { "User-Agent": UA, Accept: "application/json" },
-    });
-    if (!res.ok) return null;
-    const json = await res.json();
-    return json.properties?.timeseries || null;
-  } catch (_) {
-    return null;
-  }
+  const json = await fetchJson(
+    `https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`,
+    3000,
+  );
+  return json?.properties?.timeseries || null;
 }
 
 function buildSlots(airport, taf, now) {
@@ -452,28 +466,20 @@ function buildSlots(airport, taf, now) {
   });
 }
 
-async function buildWeather() {
+async function buildWeatherInner() {
   const warnings = [];
   let metars = [];
   let tafs = [];
   let tafDown = false;
-  try {
-    const res = await fetch(`https://aviationweather.gov/api/data/metar?ids=${ICAO_LIST}&format=json`, { headers: { Accept: "application/json", "User-Agent": UA } });
-    if (res.ok) metars = await res.json();
-    else warnings.push("Primary METAR unavailable");
-  } catch (_) {
-    warnings.push("Primary METAR unavailable");
-  }
-  try {
-    const res = await fetch(`https://aviationweather.gov/api/data/taf?ids=${ICAO_LIST}&format=json`, { headers: { Accept: "application/json", "User-Agent": UA } });
-    if (res.ok) tafs = await res.json();
-    else tafDown = true;
-  } catch (_) {
-    tafDown = true;
-  }
+  const metarJson = await fetchJson(`https://aviationweather.gov/api/data/metar?ids=${ICAO_LIST}&format=json`, 6000);
+  if (Array.isArray(metarJson)) metars = metarJson;
+  else warnings.push("Primary METAR unavailable");
+  const tafJson = await fetchJson(`https://aviationweather.gov/api/data/taf?ids=${ICAO_LIST}&format=json`, 6000);
+  if (Array.isArray(tafJson)) tafs = tafJson;
+  else tafDown = true;
   if (tafDown) warnings.push("TAF down — retrying every 2 min");
 
-  const metarBy = new Map((metars || []).map((m) => [m.icaoId, m]));
+  const metarBy = new Map(metars.map((m) => [m.icaoId, m]));
   const missingMetar = AIRPORTS.filter((a) => !metarBy.has(a.icao));
   if (missingMetar.length) {
     const extras = await Promise.all(missingMetar.map((a) => fetchNoaaMetar(a.icao)));
@@ -487,55 +493,62 @@ async function buildWeather() {
     if (used) warnings.push("METAR from NOAA backup");
   }
 
-  const tafBy = new Map((tafs || []).map((t) => [t.icaoId, t]));
+  const tafBy = new Map(tafs.map((t) => [t.icaoId, t]));
   const now = new Date();
-  const seriesList = await Promise.all(AIRPORTS.map((a) => fetchMetNoSeries(a.lat, a.lon)));
+  const needModel = AIRPORTS.map((a) => tafDown || !tafBy.get(a.icao)?.fcsts?.length || !metarBy.has(a.icao));
+  const seriesList = await Promise.all(
+    AIRPORTS.map((a, i) => (needModel[i] ? fetchMetNoSeries(a.lat, a.lon) : Promise.resolve(null))),
+  );
 
   const airports = [];
   for (let i = 0; i < AIRPORTS.length; i++) {
     const a = AIRPORTS[i];
     try {
-    const series = seriesList[i];
-    const taf = tafBy.get(a.icao);
-    const airportTafDown = tafDown || !(taf?.fcsts?.length);
-    const slots = buildSlots(a, airportTafDown ? null : taf, now);
-    for (const slot of slots) {
-      const mid = new Date(new Date(slot.startIso).getTime() + 90 * 60 * 1000);
-      const point = nearestMetNo(series, mid.getTime());
-      if (airportTafDown) {
-        if (point) {
-          slot.prevailing = condFromMetNo(point);
-          slot.alert = alertLevel(slot.prevailing);
-        }
-      } else if (point) {
-        const d = point.data?.instant?.details || {};
-        if (slot.prevailing.tempC == null) slot.prevailing.tempC = d.air_temperature ?? null;
-        if (slot.prevailing.dewC == null) slot.prevailing.dewC = d.dew_point_temperature ?? null;
-        if (slot.tempo) {
-          if (slot.tempo.tempC == null) slot.tempo.tempC = slot.prevailing.tempC;
-          if (slot.tempo.dewC == null) slot.tempo.dewC = slot.prevailing.dewC;
+      const series = seriesList[i];
+      const taf = tafBy.get(a.icao);
+      const airportTafDown = tafDown || !(taf?.fcsts?.length);
+      const slots = buildSlots(a, airportTafDown ? null : taf, now);
+      for (const slot of slots) {
+        const mid = new Date(new Date(slot.startIso).getTime() + 90 * 60 * 1000);
+        const point = nearestMetNo(series, mid.getTime());
+        if (airportTafDown) {
+          if (point) {
+            slot.prevailing = condFromMetNo(point);
+            slot.alert = alertLevel(slot.prevailing);
+          }
+        } else if (point) {
+          const d = point.data?.instant?.details || {};
+          if (slot.prevailing.tempC == null) slot.prevailing.tempC = d.air_temperature ?? null;
+          if (slot.prevailing.dewC == null) slot.prevailing.dewC = d.dew_point_temperature ?? null;
+          if (slot.tempo) {
+            if (slot.tempo.tempC == null) slot.tempo.tempC = slot.prevailing.tempC;
+            if (slot.tempo.dewC == null) slot.tempo.dewC = slot.prevailing.dewC;
+          }
         }
       }
-    }
-    let metar = metarOf(metarBy.get(a.icao));
-    if (!metar.raw) {
-      const nowPoint = condFromMetNo(nearestMetNo(series, now.getTime()));
-      if (nowPoint.windKt != null || nowPoint.tempC != null) metar = metarFromModel(a.icao, nowPoint);
-    }
-    let rowAlert = metar.fltCat === "LIFR" || metar.fltCat === "IFR" ? "red" : metar.fltCat === "MVFR" ? "amber" : "none";
-    for (const s of slots.slice(0, 4)) rowAlert = worse(rowAlert, s.alert);
-    airports.push({
-      iata: a.iata,
-      icao: a.icao,
-      name: a.name,
-      tz: a.tz,
-      runways: a.runways,
-      metar,
-      tafDown: airportTafDown,
-      slots,
-      rowAlert,
-    });
-    } catch (e) {
+      let metar = metarOf(metarBy.get(a.icao));
+      if (!metar.raw) {
+        const nowPoint = condFromMetNo(nearestMetNo(series, now.getTime()));
+        if (nowPoint.windKt != null || nowPoint.tempC != null) metar = metarFromModel(a.icao, nowPoint);
+      }
+      for (const slot of slots) {
+        if (slot.prevailing.tempC == null) slot.prevailing.tempC = metar.tempC;
+        if (slot.prevailing.dewC == null) slot.prevailing.dewC = metar.dewC;
+      }
+      let rowAlert = metar.fltCat === "LIFR" || metar.fltCat === "IFR" ? "red" : metar.fltCat === "MVFR" ? "amber" : "none";
+      for (const s of slots.slice(0, 4)) rowAlert = worse(rowAlert, s.alert);
+      airports.push({
+        iata: a.iata,
+        icao: a.icao,
+        name: a.name,
+        tz: a.tz,
+        runways: a.runways,
+        metar,
+        tafDown: airportTafDown,
+        slots,
+        rowAlert,
+      });
+    } catch (_) {
       warnings.push(`${a.iata} failed`);
       airports.push({
         iata: a.iata,
@@ -543,14 +556,27 @@ async function buildWeather() {
         name: a.name,
         tz: a.tz,
         runways: a.runways,
-        metar: metarOf(null),
+        metar: metarOf(metarBy.get(a.icao)),
         tafDown: true,
-        slots: buildSlots(a, null, now),
+        slots: buildSlots(a, tafBy.get(a.icao) || null, now),
         rowAlert: "none",
       });
     }
   }
   return { fetchedAt: now.toISOString(), warnings, tafDown, airports };
+}
+
+async function buildWeather() {
+  try {
+    const data = await buildWeatherInner();
+    if (data.airports?.length) lastGoodWeather = data;
+    return data;
+  } catch (e) {
+    if (lastGoodWeather) {
+      return { ...lastGoodWeather, warnings: [...(lastGoodWeather.warnings || []), "Using last good weather"] };
+    }
+    throw e;
+  }
 }
 
 export default {
@@ -565,9 +591,10 @@ export default {
     }
     if (url.pathname === "/api/weather" || url.pathname === "/api/weather/") {
       try {
-        return json(await buildWeather(), 200, 90);
+        return json(await buildWeather(), 200, 30);
       } catch (e) {
-        return json({ error: String(e.message || e), tafDown: true }, 500, 10);
+        if (lastGoodWeather) return json({ ...lastGoodWeather, warnings: [...(lastGoodWeather.warnings || []), String(e.message || e)] }, 200, 10);
+        return json({ error: String(e.message || e), tafDown: true, airports: [] }, 200, 10);
       }
     }
     if (env.ASSETS) return env.ASSETS.fetch(request);
