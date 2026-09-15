@@ -494,6 +494,7 @@ async function buildWeather() {
   const airports = [];
   for (let i = 0; i < AIRPORTS.length; i++) {
     const a = AIRPORTS[i];
+    try {
     const series = seriesList[i];
     const taf = tafBy.get(a.icao);
     const airportTafDown = tafDown || !(taf?.fcsts?.length);
@@ -518,7 +519,7 @@ async function buildWeather() {
     }
     let metar = metarOf(metarBy.get(a.icao));
     if (!metar.raw) {
-      const now = condFromMetNo(nearestMetNo(series, now.getTime()));
+      const nowPoint = condFromMetNo(nearestMetNo(series, now.getTime()));
       if (nowPoint.windKt != null || nowPoint.tempC != null) metar = metarFromModel(a.icao, nowPoint);
     }
     let rowAlert = metar.fltCat === "LIFR" || metar.fltCat === "IFR" ? "red" : metar.fltCat === "MVFR" ? "amber" : "none";
@@ -534,6 +535,20 @@ async function buildWeather() {
       slots,
       rowAlert,
     });
+    } catch (e) {
+      warnings.push(`${a.iata} failed`);
+      airports.push({
+        iata: a.iata,
+        icao: a.icao,
+        name: a.name,
+        tz: a.tz,
+        runways: a.runways,
+        metar: metarOf(null),
+        tafDown: true,
+        slots: buildSlots(a, null, now),
+        rowAlert: "none",
+      });
+    }
   }
   return { fetchedAt: now.toISOString(), warnings, tafDown, airports };
 }

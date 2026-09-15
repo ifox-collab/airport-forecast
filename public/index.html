@@ -309,6 +309,7 @@
         ]);
         weather = w;
         flights = f;
+        if (!w?.airports) throw new Error(w?.error || "weather payload missing");
         paint();
       } catch (e) {
         document.getElementById("updated").textContent = "Could not load weather";
@@ -318,7 +319,8 @@
     document.getElementById("refresh").onclick = () => load();
     setInterval(tickClocks, 1000);
     function schedule() {
-      const ms = weather?.tafDown ? 2 * 60 * 1000 : 5 * 60 * 1000;
+      const anyTafDown = !!(weather?.tafDown || (weather?.airports || []).some((a) => a.tafDown));
+      const ms = anyTafDown ? 2 * 60 * 1000 : 5 * 60 * 1000;
       setTimeout(async () => { await load(); schedule(); }, ms);
     }
     setTimeout(() => location.reload(), 5 * 60 * 1000);
