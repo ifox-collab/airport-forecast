@@ -198,10 +198,12 @@ function utcHHmm(date) {
 function nextSlots(tz, count, from) {
   const slots = [];
   const start = new Date(from);
-  start.setUTCMinutes(0, 0, 0);
+  start.setUTCSeconds(0, 0);
+  start.setUTCMinutes(start.getUTCMinutes() - (start.getUTCMinutes() % 30));
   start.setUTCHours(start.getUTCHours() - 6);
-  for (let i = 0; i < 96 && slots.length < count; i++) {
-    const t = new Date(start.getTime() + i * 3600 * 1000);
+  // 30-min steps so UTC+9:30 fields (ADL, DRW) still hit local :00 / 3-hour marks
+  for (let i = 0; i < 200 && slots.length < count; i++) {
+    const t = new Date(start.getTime() + i * 30 * 60 * 1000);
     const lp = localParts(t, tz);
     if (Number(lp.minute) !== 0 || Number(lp.hour) % 3 !== 0) continue;
     if (t.getTime() + 3 * 3600 * 1000 <= from.getTime()) continue;
