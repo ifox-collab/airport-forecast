@@ -252,7 +252,7 @@
           <p class="name">${a.iata} <span class="icao">${a.icao}</span> ${a.name}</p>
           ${clockHtml(a.tz, "clk-" + a.icao)}
           ${m.fltCat ? `<span class="badge ${m.fltCat}">${m.fltCat}</span>` : ""}
-          ${m.ageMin != null ? `<span class="age ${m.ageMin >= 60 ? "stale" : ""}">METAR ${m.ageMin} min ago</span>` : ""}
+          ${m.model ? `<span class="age">No METAR · model</span>` : m.ageMin != null ? `<span class="age ${m.ageMin >= 60 ? "stale" : ""}">METAR ${m.ageMin} min ago</span>` : ""}
         </div>
         <div class="body">
           <div class="now">
@@ -273,7 +273,7 @@
             </div>
           </div>
           <div class="boxes">
-            ${a.tafDown ? `<div class="tafdown">TAF down</div>` : ""}
+            ${a.tafDown ? `<div class="tafdown">TAF down<br>model forecast</div>` : ""}
             ${boxes}
           </div>
         </div>

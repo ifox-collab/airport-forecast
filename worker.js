@@ -298,6 +298,130 @@ async function fetchNoaaMetar(icao) {
   }
 }
 
+function nearestMetNo(series, atMs) {
+  if (!series?.length) return null;
+  let best = null;
+  let bestDiff = Infinity;
+  for (const s of series) {
+    const d = Math.abs(new Date(s.time).getTime() - atMs);
+    if (d < bestDiff) {
+      bestDiff = d;
+      best = s;
+    }
+  }
+  if (!best || bestDiff > 4 * 3600 * 1000) return null;
+  return best;
+}
+
+function coverFromFraction(pct) {
+  if (pct == null) return "NSC";
+  if (pct < 10) return "NSC";
+  if (pct < 31) return "FEW";
+  if (pct < 56) return "SCT";
+  if (pct < 88) return "BKN";
+  return "OVC";
+}
+
+function msToKt(ms) {
+  if (ms == null || !Number.isFinite(ms)) return null;
+  return Math.round(ms * 1.94384);
+}
+
+function condFromMetNo(point) {
+  if (!point) return emptyCond();
+  const d = point.data?.instant?.details || {};
+  const symbol = String(point.data?.next_1_hours?.summary?.symbol_code || point.data?.next_6_hours?.summary?.symbol_code || "").toLowerCase();
+  const precip = point.data?.next_1_hours?.details?.precipitation_amount ?? point.data?.next_6_hours?.details?.precipitation_amount ?? 0;
+  const fog = d.fog_area_fraction || 0;
+  const total = d.cloud_area_fraction ?? 0;
+  const low = d.cloud_area_fraction_low ?? total;
+  const cover = coverFromFraction(total);
+  const lowCover = coverFromFraction(low);
+  let wx = null;
+  let visM = 10000;
+  if (fog >= 40 || symbol.includes("fog")) {
+    wx = "FG";
+    visM = fog >= 70 ? 400 : 800;
+  } else if (symbol.includes("thunder")) {
+    wx = "TSRA";
+    visM = 3000;
+  } else if (symbol.includes("heavyrain") || precip >= 2) {
+    wx = "+RA";
+    visM = 2500;
+  } else if (symbol.includes("rain") || precip >= 0.2) {
+    wx = symbol.includes("shower") ? "SHRA" : "RA";
+    visM = 5000;
+  } else if (symbol.includes("snow") || symbol.includes("sleet")) {
+    wx = "SN";
+    visM = 4000;
+  } else if (symbol.includes("drizzle")) {
+    wx = "DZ";
+    visM = 6000;
+  }
+  const overcast = ["BKN", "OVC"].includes(lowCover) || ["BKN", "OVC"].includes(cover);
+  const ceilingFt = wx === "FG" ? 200 : overcast ? 2000 : null;
+  const base = cover === "NSC" ? null : overcast ? 2000 : 3000;
+  const clouds = [{ cover, base }];
+  const windKt = msToKt(d.wind_speed);
+  const gustKt = d.wind_speed_of_gust != null ? msToKt(d.wind_speed_of_gust) : null;
+  const cavok = visM >= 9999 && !wx && ["NSC", "FEW", "SCT"].includes(cover);
+  return {
+    windDir: d.wind_from_direction != null ? Math.round(d.wind_from_direction) : null,
+    windKt,
+    gustKt,
+    visM,
+    ceilingFt,
+    wx,
+    wxKind: classifyWx(wx),
+    clouds,
+    cavok,
+    tempC: d.air_temperature ?? null,
+    dewC: d.dew_point_temperature ?? null,
+  };
+}
+
+function fltCatOf(c) {
+  const vis = c.visM;
+  const ceil = c.ceilingFt;
+  if ((vis != null && vis < 1600) || (ceil != null && ceil < 500)) return "LIFR";
+  if ((vis != null && vis < 5000) || (ceil != null && ceil < 1000)) return "IFR";
+  if ((vis != null && vis < 8000) || (ceil != null && ceil < 3000)) return "MVFR";
+  return "VFR";
+}
+
+function metarFromModel(icao, cond) {
+  return {
+    raw: `MODEL ${icao} (met.no)`,
+    fltCat: fltCatOf(cond),
+    windDir: cond.windDir,
+    windKt: cond.windKt,
+    gustKt: cond.gustKt,
+    visM: cond.visM,
+    ceilingFt: cond.ceilingFt,
+    wx: cond.wx,
+    wxKind: cond.wxKind,
+    tempC: cond.tempC,
+    dewC: cond.dewC,
+    clouds: cond.clouds,
+    ageMin: null,
+    cavok: cond.cavok,
+    model: true,
+  };
+}
+
+async function fetchMetNoSeries(lat, lon) {
+  try {
+    const res = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/complete?lat=${lat}&lon=${lon}`, {
+      headers: { "User-Agent": UA, Accept: "application/json" },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json.properties?.timeseries || null;
+  } catch (_) {
+    return null;
+  }
+}
+
 function buildSlots(airport, taf, now) {
   const fcsts = taf?.fcsts || [];
   return nextSlots(airport.tz, 10, now).map((start) => {
@@ -328,30 +452,6 @@ function buildSlots(airport, taf, now) {
   });
 }
 
-async function attachMetNo(cond, lat, lon, at) {
-  try {
-    const res = await fetch(`https://api.met.no/weatherapi/locationforecast/2.0/compact?lat=${lat}&lon=${lon}`, { headers: { "User-Agent": UA, Accept: "application/json" } });
-    if (!res.ok) return cond;
-    const json = await res.json();
-    const series = json.properties?.timeseries || [];
-    let best = null;
-    let bestDiff = Infinity;
-    const t = at.getTime();
-    for (const s of series) {
-      const d = Math.abs(new Date(s.time).getTime() - t);
-      if (d < bestDiff) {
-        bestDiff = d;
-        best = s;
-      }
-    }
-    if (!best || bestDiff > 4 * 3600 * 1000) return cond;
-    const d = best.data.instant.details;
-    return { ...cond, tempC: d.air_temperature ?? cond.tempC, dewC: d.dew_point_temperature ?? cond.dewC };
-  } catch (_) {
-    return cond;
-  }
-}
-
 async function buildWeather() {
   const warnings = [];
   let metars = [];
@@ -372,32 +472,55 @@ async function buildWeather() {
     tafDown = true;
   }
   if (tafDown) warnings.push("TAF down — retrying every 2 min");
-  if (!metars.length) {
-    const backups = await Promise.all(AIRPORTS.map((a) => fetchNoaaMetar(a.icao)));
-    metars = backups.filter(Boolean);
-    if (metars.length) warnings.push("METAR from NOAA backup");
+
+  const metarBy = new Map((metars || []).map((m) => [m.icaoId, m]));
+  const missingMetar = AIRPORTS.filter((a) => !metarBy.has(a.icao));
+  if (missingMetar.length) {
+    const extras = await Promise.all(missingMetar.map((a) => fetchNoaaMetar(a.icao)));
+    let used = 0;
+    for (const row of extras) {
+      if (row) {
+        metarBy.set(row.icaoId, row);
+        used++;
+      }
+    }
+    if (used) warnings.push("METAR from NOAA backup");
   }
 
-  const metarBy = new Map(metars.map((m) => [m.icaoId, m]));
-  const tafBy = new Map(tafs.map((t) => [t.icaoId, t]));
+  const tafBy = new Map((tafs || []).map((t) => [t.icaoId, t]));
   const now = new Date();
+  const seriesList = await Promise.all(AIRPORTS.map((a) => fetchMetNoSeries(a.lat, a.lon)));
 
   const airports = [];
-  for (const a of AIRPORTS) {
+  for (let i = 0; i < AIRPORTS.length; i++) {
+    const a = AIRPORTS[i];
+    const series = seriesList[i];
     const taf = tafBy.get(a.icao);
     const airportTafDown = tafDown || !(taf?.fcsts?.length);
     const slots = buildSlots(a, airportTafDown ? null : taf, now);
-    const sample = emptyCond();
-    const filled = await attachMetNo(sample, a.lat, a.lon, now);
     for (const slot of slots) {
-      slot.prevailing.tempC = filled.tempC;
-      slot.prevailing.dewC = filled.dewC;
-      if (slot.tempo) {
-        slot.tempo.tempC = filled.tempC;
-        slot.tempo.dewC = filled.dewC;
+      const mid = new Date(new Date(slot.startIso).getTime() + 90 * 60 * 1000);
+      const point = nearestMetNo(series, mid.getTime());
+      if (airportTafDown) {
+        if (point) {
+          slot.prevailing = condFromMetNo(point);
+          slot.alert = alertLevel(slot.prevailing);
+        }
+      } else if (point) {
+        const d = point.data?.instant?.details || {};
+        if (slot.prevailing.tempC == null) slot.prevailing.tempC = d.air_temperature ?? null;
+        if (slot.prevailing.dewC == null) slot.prevailing.dewC = d.dew_point_temperature ?? null;
+        if (slot.tempo) {
+          if (slot.tempo.tempC == null) slot.tempo.tempC = slot.prevailing.tempC;
+          if (slot.tempo.dewC == null) slot.tempo.dewC = slot.prevailing.dewC;
+        }
       }
     }
-    const metar = metarOf(metarBy.get(a.icao));
+    let metar = metarOf(metarBy.get(a.icao));
+    if (!metar.raw) {
+      const now = condFromMetNo(nearestMetNo(series, now.getTime()));
+      if (nowPoint.windKt != null || nowPoint.tempC != null) metar = metarFromModel(a.icao, nowPoint);
+    }
     let rowAlert = metar.fltCat === "LIFR" || metar.fltCat === "IFR" ? "red" : metar.fltCat === "MVFR" ? "amber" : "none";
     for (const s of slots.slice(0, 4)) rowAlert = worse(rowAlert, s.alert);
     airports.push({
