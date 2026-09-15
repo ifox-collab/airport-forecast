@@ -156,6 +156,18 @@
       if (n === 0) n = 36;
       return String(n).padStart(2, "0");
     }
+    function alignmentDelta(a, b) {
+      const d = Math.abs((((a - b) % 180) + 180) % 180);
+      return d > 90 ? 180 - d : d;
+    }
+    function uniqueRunways(runways) {
+      const out = [];
+      for (const rw of runways || []) {
+        if (out.some((kept) => alignmentDelta(kept.heading, rw.heading) < 20)) continue;
+        out.push(rw);
+      }
+      return out;
+    }
     function windRose(runways, dir, kt, compact) {
       const cx = 100, cy = 100;
       const ticks = [];
@@ -168,7 +180,7 @@
       const extra = [[30,158,32],[60,176,56],[120,176,148],[150,158,172],[210,42,172],[240,24,148],[300,24,56],[330,42,32]];
       const labels = labs.map(([t,x,y]) => `<text x="${x}" y="${y}" text-anchor="middle" fill="#e8eef6" font-size="12" font-weight="700">${t}</text>`).join("")
         + extra.map(([t,x,y]) => `<text x="${x}" y="${y}" text-anchor="middle" fill="#8b9bb4" font-size="9">${String(t).padStart(2,"0")}</text>`).join("");
-      const rws = (runways || []).map((rw) => {
+      const rws = uniqueRunways(runways).map((rw) => {
         const [a,b] = rw.ident.split("/");
         const rot = rw.heading;
         return `<g transform="rotate(${rot} ${cx} ${cy})">
