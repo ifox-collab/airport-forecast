@@ -2,376 +2,121 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Airport weather board</title>
-  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
-  <meta http-equiv="Pragma" content="no-cache" />
-  <meta http-equiv="Expires" content="0" />
-  <link rel="preconnect" href="https://fonts.googleapis.com" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Airport Forecast Board · METAR + TAF + Model</title>
   <style>
     :root {
-      --bg: #071018; --surface: #0e1822; --elevated: #13202c; --border: #243444;
-      --fg: #e8eef6; --muted: #8b9bb4; --vfr: #22c55e; --vfr-fg: #052e16;
-      --caution: #eab308; --caution-fg: #1a1403; --danger: #ef4444; --danger-fg: #fff;
-      --arrow: #4ade80;
+      --bg: #0b0f14; --surface: #141a22; --surface2: #1c2430; --border: #2a3544;
+      --text: #e8eef6; --muted: #8b9bb4; --accent: #3b82f6; --good: #22c55e;
+      --warn: #eab308; --bad: #ef4444;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; background: var(--bg); color: var(--fg); font-family: Barlow, system-ui, sans-serif; }
-    body { display: flex; flex-direction: column; overflow: hidden; }
+    html, body { height: 100%; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    body { display: flex; flex-direction: column; min-height: 100vh; }
     header {
-      display: flex; align-items: center; justify-content: space-between; gap: 12px;
-      padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
+      background: #0f1520; border-bottom: 1px solid var(--border); padding: 6px 14px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0;
     }
-    header .kicker { font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
-    header h1 { font-family: "Barlow Condensed", sans-serif; font-size: 22px; font-weight: 600; }
-    .updated { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+    header h1 { font-size: 1.05rem; font-weight: 600; }
+    .controls { display: flex; align-items: center; gap: 10px; }
     button {
-      width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--border);
-      background: var(--elevated); color: var(--fg); cursor: pointer; font-size: 16px;
+      background: var(--accent); color: #fff; border: none; padding: 7px 14px;
+      border-radius: 6px; font-size: 0.88rem; cursor: pointer;
     }
-    .banner { background: rgba(234,179,8,.2); color: var(--caution); padding: 6px 16px; font-size: 12px; font-weight: 700; text-transform: uppercase; }
-    .scroller { flex: 1; overflow: hidden; position: relative; }
-    .track { will-change: transform; }
-    .pad { display: flex; flex-direction: column; gap: 8px; padding: 12px; }
-    .row {
-      border: 1px solid var(--border); border-radius: 10px; background: var(--surface); padding: 10px 12px;
+    button:disabled { opacity: 0.5; }
+    .status { font-size: 0.82rem; color: var(--muted); }
+    .status.error { color: var(--bad); }
+    .status.stale { color: var(--warn); }
+    main { flex: 1; }
+    .loading { text-align: center; padding: 40px; color: var(--muted); }
+
+    .airport { border-bottom: 1px solid var(--border); background: var(--surface); }
+    .airport.alert-high { animation: police-red 0.9s infinite; border-left: 6px solid #ef4444; }
+    .airport.alert-medium { animation: police-amber 1.1s infinite; border-left: 6px solid #eab308; }
+    @keyframes police-red {
+      0%, 100% { background: #1f0a0a; box-shadow: inset 0 0 0 4px #ef4444; }
+      50% { background: #3b1010; box-shadow: inset 0 0 0 6px #ff1a1a; }
     }
-    .row.red { border-color: var(--danger); animation: flashRed .9s infinite; }
-    .row.amber { border-color: var(--caution); animation: flashAmber 1.1s infinite; }
-    @keyframes flashRed { 0%,100%{ box-shadow: inset 0 0 0 2px #ef4444; } 50%{ box-shadow: inset 0 0 0 4px #ff2a2a; } }
-    @keyframes flashAmber { 0%,100%{ box-shadow: inset 0 0 0 2px #eab308; } 50%{ box-shadow: inset 0 0 0 4px #facc15; } }
-    .row-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; margin-bottom: 8px; }
-    .name { font-family: "Barlow Condensed", sans-serif; font-size: 28px; font-weight: 700; }
-    .icao { color: var(--muted); font-size: 18px; font-weight: 500; }
-    .clock { font-family: "Barlow Condensed", sans-serif; font-size: 26px; font-weight: 600; font-variant-numeric: tabular-nums; }
-    .clock span { font-size: 13px; color: var(--muted); font-weight: 500; margin-left: 8px; }
-    .badge { border-radius: 999px; padding: 2px 8px; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
-    .VFR { background: var(--vfr); color: var(--vfr-fg); }
-    .MVFR { background: var(--caution); color: var(--caution-fg); }
-    .IFR, .LIFR { background: var(--danger); color: #fff; }
-    .age { font-size: 11px; color: var(--muted); }
-    .age.stale { color: var(--caution); }
-    .body { display: flex; gap: 16px; }
-    .now { width: 280px; flex-shrink: 0; }
-    .boxes { flex: 1; min-width: 0; display: flex; gap: 8px; overflow-x: auto; }
-    .box {
-      width: 168px; flex-shrink: 0; border: 1px solid var(--border); border-radius: 8px;
-      background: var(--elevated); padding: 8px; display: flex; flex-direction: column; gap: 6px;
+    @keyframes police-amber {
+      0%, 100% { background: #1f1a08; box-shadow: inset 0 0 0 4px #eab308; }
+      50% { background: #3b3010; box-shadow: inset 0 0 0 6px #facc15; }
     }
-    .box.red { border-color: var(--danger); animation: flashRed .9s infinite; }
-    .box.amber { border-color: var(--caution); animation: flashAmber 1.1s infinite; }
-    .box-head { display: flex; justify-content: space-between; font-size: 11px; text-transform: uppercase; font-weight: 700; }
-    .box-head .z { color: var(--muted); font-weight: 500; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; font-size: 11px; color: var(--muted); line-height: 1.3; }
-    .grid .fg { color: var(--fg); }
-    .hot { background: rgba(239,68,68,.2); color: var(--danger); font-weight: 800; border-radius: 3px; padding: 0 2px; }
-    .event { background: rgba(232,238,246,.1); border-radius: 4px; padding: 3px 5px; font-size: 11px; font-weight: 600; }
-    .warn { background: rgba(239,68,68,.2); color: var(--danger); font-size: 11px; font-weight: 800; text-transform: uppercase; border-radius: 4px; padding: 3px 5px; }
-    .tafdown {
-      min-width: 140px; min-height: 96px; display: flex; align-items: center; justify-content: center;
-      border: 1px solid var(--caution); background: rgba(234,179,8,.15); color: var(--caution);
-      font-size: 12px; font-weight: 800; text-transform: uppercase; border-radius: 8px; padding: 8px; text-align: center;
+    .airport-header {
+      background: var(--surface2); padding: 7px 12px; font-weight: 600; font-size: 1.1rem;
+      border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
     }
-    .raw { margin-top: 6px; font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
-    .adsb { margin-top: 6px; font-size: 12px; color: var(--muted); }
-    .adsb strong { color: var(--fg); }
-    .rose { width: 168px; height: 168px; margin: 0 auto; position: relative; }
-    .rose.sm { width: 132px; height: 132px; }
-    .rose svg { width: 100%; height: 100%; }
-    .pill {
-      position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
-      background: #0b1a12; color: #d1fae5; border-radius: 999px; padding: 1px 8px;
-      font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums;
+    .airport-header .left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .icao { color: var(--accent); font-size: 1.15rem; flex-shrink: 0; }
+    .name { color: #fff; font-weight: 400; flex-shrink: 0; white-space: nowrap; }
+    .fltcat {
+      font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;
+      letter-spacing: 0.03em; flex-shrink: 0; margin-left: 8px;
     }
-    @media (max-width: 800px) {
-      .body { flex-direction: column; }
-      .now { width: 100%; }
+    .fltcat.VFR { background: #22c55e; color: #0b0f14; }
+    .fltcat.MVFR { background: #3b82f6; color: #fff; }
+    .fltcat.IFR { background: #eab308; color: #0b0f14; }
+    .fltcat.LIFR { background: #ef4444; color: #fff; }
+    .metar-strip { background: #0d1219; border-bottom: 1px solid var(--border); padding: 5px 12px; font-size: 0.82rem; }
+    .metar-decoded { display: flex; flex-wrap: wrap; gap: 10px 16px; }
+    .metar-item strong { color: var(--muted); font-weight: 500; margin-right: 4px; }
+    .src-badge {
+      font-size: 0.68rem; font-weight: 700; padding: 1px 6px; border-radius: 3px;
+      letter-spacing: 0.04em; margin-left: 4px; vertical-align: middle;
+    }
+    .src-badge.model { background: #334155; color: #cbd5e1; }
+    .src-badge.taf { background: #1e3a5f; color: #93c5fd; }
+    .src-badge.metar { background: #14532d; color: #86efac; }
+    .src-badge.stale { background: #713f12; color: #fde68a; }
+    .taf-line { color: #93c5fd; margin-top: 3px; }
+    .metar-raw { font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
+    .timeline { display: flex; overflow-x: auto; padding: 4px 6px 6px; gap: 3px; }
+    .slot {
+      flex: 0 0 180px; min-height: 120px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; padding: 8px 7px; text-align: center; font-size: 0.9rem;
+    }
+    .slot.now { border-color: var(--accent); }
+    .slot.alert-high { animation: box-red 0.9s infinite; border-width: 3px; }
+    .slot.alert-medium { animation: box-amber 1.1s infinite; border-width: 3px; }
+    @keyframes box-red {
+      0%, 100% { border-color: #ef4444; background: #1a0a0a; }
+      50% { border-color: #ff2020; background: #2f0c0c; }
+    }
+    @keyframes box-amber {
+      0%, 100% { border-color: #eab308; background: #1a1608; }
+      50% { border-color: #facc15; background: #2f280c; }
+    }
+    .slot-time { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
+    .wx-icon { font-size: 1.6rem; display: block; margin: 2px 0; }
+    .wind-row { font-weight: 600; font-size: 1.05rem; }
+    .wind.low { color: var(--good); } .wind.med { color: var(--warn); } .wind.high { color: var(--bad); }
+    .gust { font-size: 0.8rem; color: var(--muted); }
+    .temp-row { margin-top: 4px; }
+    .dew { color: var(--muted); font-size: 0.78rem; }
+    .vis { font-size: 0.85rem; margin-top: 3px; }
+    .vis.poor { color: var(--bad); font-weight: 600; }
+    .cloud { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+    .warn-text { margin-top: 4px; font-size: 0.72rem; font-weight: 700; padding: 2px 4px; border-radius: 3px; }
+    .warn-text.high { background: rgba(239,68,68,0.25); color: #fca5a5; }
+    .warn-text.medium { background: rgba(234,179,8,0.22); color: #fde68a; }
+    footer {
+      padding: 4px 12px; border-top: 1px solid var(--border); font-size: 0.72rem; color: var(--muted);
+      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
     }
   </style>
 </head>
 <body>
   <header>
-    <div>
-      <h1>Airport weather board</h1>
-    </div>
-    <div style="display:flex;align-items:center;gap:12px">
-      <p class="updated" id="updated">Loading…</p>
-      <button type="button" id="refresh" title="Refresh">↻</button>
+    <h1>Airport Forecast Board · METAR / TAF + model tiles</h1>
+    <div class="controls">
+      <span class="status" id="status">Loading…</span>
+      <button id="refreshBtn" type="button">Refresh</button>
     </div>
   </header>
-  <div id="banner" class="banner" hidden>TAF down — retrying every 2 minutes</div>
-  <div class="scroller"><div class="track" id="track"></div></div>
-
-  <script>
-    const CARD = ["N","NNE","NE","ENE","E","ESE","SE","SSE","S","SSW","SW","WSW","W","WNW","NW","NNW"];
-    function cardinal(deg) {
-      if (deg == null) return "VRB";
-      if (typeof deg === "string" && (deg.includes("VRB") || deg === "N/A")) return "VRB";
-      const n = Number(deg);
-      if (!Number.isFinite(n)) return "VRB";
-      return CARD[Math.round(((n % 360) + 360) % 360 / 22.5) % 16];
-    }
-    function formatVis(m) {
-      if (m == null) return "—";
-      if (m >= 9999) return "10km+";
-      if (m >= 5000) return Math.round(m / 1000) + "km+";
-      if (m >= 1000) {
-        const km = Math.round((m / 1000) * 10) / 10;
-        return (Number.isInteger(km) ? km : km.toFixed(1)) + "km";
-      }
-      return Math.round(m) + "m";
-    }
-    function formatClouds(clouds, cavok) {
-      if (cavok) return "NIL SIG";
-      const layers = (clouds || []).filter((c) => (c.cover || "").length);
-      if (!layers.length) return "NIL SIG";
-      return layers.map((c) => {
-        const cover = (c.cover || "").toUpperCase();
-        if (cover === "NSC") return "NIL SIG";
-        if (cover === "NCD") return "No Clouds";
-        if (c.base == null || ["CLR", "SKC"].includes(cover)) return cover;
-        return cover + " " + c.base + "ft";
-      }).join(" ");
-    }
-    function formatCeiling(ft, cavok) {
-      if (cavok || ft == null) return "None";
-      return ft + "ft";
-    }
-    function formatWind(kt, dir) {
-      if (kt == null) return "Wind —";
-      return "Wind " + Math.round(kt) + " kt " + cardinal(dir);
-    }
-    function decodeWx(wx) {
-      if (!wx) return "";
-      const u = wx.toUpperCase().replace(/\s+/g, "");
-      if (!u || u === "NSW" || u === "//") return "";
-      const map = { TSRA: "thunderstorm rain", TS: "thunderstorm", SHRA: "showers", SH: "showers", RA: "rain", DZ: "drizzle", FG: "fog", BR: "mist", HZ: "haze", SN: "snow", GR: "hail" };
-      let s = u, prefix = "";
-      if (s.startsWith("+")) { prefix = "Heavy "; s = s.slice(1); }
-      else if (s.startsWith("-")) { prefix = "Light "; s = s.slice(1); }
-      const hit = Object.keys(map).find((k) => s.includes(k));
-      const out = hit ? (prefix + map[hit]).trim() : wx;
-      return out.charAt(0).toUpperCase() + out.slice(1);
-    }
-    function padRw(h) {
-      let n = Math.round(h / 10) % 36;
-      if (n === 0) n = 36;
-      return String(n).padStart(2, "0");
-    }
-    function alignmentDelta(a, b) {
-      const d = Math.abs((((a - b) % 180) + 180) % 180);
-      return d > 90 ? 180 - d : d;
-    }
-    function uniqueRunways(runways) {
-      const out = [];
-      for (const rw of runways || []) {
-        if (out.some((kept) => alignmentDelta(kept.heading, rw.heading) < 20)) continue;
-        out.push(rw);
-      }
-      return out;
-    }
-    function windRose(runways, dir, kt, compact) {
-      const cx = 100, cy = 100;
-      const ticks = [];
-      for (let a = 0; a < 360; a += 10) {
-        const rad = (a - 90) * Math.PI / 180;
-        const inner = a % 90 === 0 ? 78 : 84;
-        ticks.push(`<line x1="${cx + Math.cos(rad)*inner}" y1="${cy + Math.sin(rad)*inner}" x2="${cx + Math.cos(rad)*96}" y2="${cy + Math.sin(rad)*96}" stroke="#9fb4c8" stroke-width="${a % 90 === 0 ? 2 : 1}" />`);
-      }
-      const labs = [["N",100,18],["E",186,104],["S",100,190],["W",14,104]];
-      const extra = [[30,158,32],[60,176,56],[120,176,148],[150,158,172],[210,42,172],[240,24,148],[300,24,56],[330,42,32]];
-      const labels = labs.map(([t,x,y]) => `<text x="${x}" y="${y}" text-anchor="middle" fill="#e8eef6" font-size="12" font-weight="700">${t}</text>`).join("")
-        + extra.map(([t,x,y]) => `<text x="${x}" y="${y}" text-anchor="middle" fill="#8b9bb4" font-size="9">${String(t).padStart(2,"0")}</text>`).join("");
-      const rws = uniqueRunways(runways).map((rw) => {
-        const [a,b] = rw.ident.split("/");
-        const rot = rw.heading;
-        return `<g transform="rotate(${rot} ${cx} ${cy})">
-          <rect x="92" y="31" width="16" height="138" rx="2" fill="#3d4f63" stroke="#9fb4c8" />
-          <text x="100" y="44" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">${a || padRw(rw.heading)}</text>
-          <text x="100" y="162" text-anchor="middle" fill="#fff" font-size="9" font-weight="700">${b || padRw(rw.heading+180)}</text>
-        </g>`;
-      }).join("");
-      const arrow = dir == null ? "" : `<g transform="rotate(${dir} ${cx} ${cy})">
-        <path d="M ${cx} ${cy-48} L ${cx-14} ${cy-72} L ${cx-5} ${cy-72} L ${cx-5} ${cy-96} L ${cx+5} ${cy-96} L ${cx+5} ${cy-72} L ${cx+14} ${cy-72} Z" fill="#4ade80" stroke="#166534" />
-      </g>`;
-      const pill = (!compact && dir != null && kt != null) ? `<div class="pill">${Math.round(dir)}° ${Math.round(kt)} kt</div>` : "";
-      return `<div class="rose ${compact ? "sm" : ""}"><svg viewBox="0 0 200 200">${ticks.join("")}${labels}${rws}${arrow}</svg>${pill}</div>`;
-    }
-    function hot(on) { return on ? "hot" : "fg"; }
-    function strong(kt) { return kt != null && kt >= 35; }
-    function eventLine(kind, cond) {
-      if (!cond) return "";
-      const wx = decodeWx(cond.wx);
-      const gust = cond.gustKt != null && cond.windKt != null && cond.gustKt > cond.windKt ? ` gusting ${Math.round(cond.gustKt)} kt` : "";
-      const temp = cond.tempC != null ? ` Temp ${Math.round(cond.tempC)}°` : "";
-      return `<p class="event">${kind} ${wx} Vis ${formatVis(cond.visM)}${gust}${temp}</p>`;
-    }
-    function clockHtml(tz, id) {
-      return `<p class="clock" data-tz="${tz}" id="${id}">--:--:--<span>(--:--:-- UTC)</span></p>`;
-    }
-    function tickClocks() {
-      const now = new Date();
-      document.querySelectorAll(".clock[data-tz]").forEach((el) => {
-        const tz = el.getAttribute("data-tz");
-        const parts = new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).formatToParts(now);
-        const get = (t) => parts.find((p) => p.type === t)?.value ?? "";
-        const utc = now.toISOString().slice(11, 19);
-        el.innerHTML = `${get("hour")}:${get("minute")}:${get("second")}<span>(${utc} UTC)</span>`;
-      });
-    }
-    function renderAirport(a, flights) {
-      const m = a.metar || {};
-      const cavok = !!m.cavok;
-      const wxWords = decodeWx(m.wx);
-      const showGust = m.gustKt != null && m.windKt != null && m.gustKt > m.windKt;
-      const boxes = (a.slots || []).map((s) => {
-        const c = s.prevailing;
-        const showG = c.gustKt != null && c.windKt != null && c.gustKt > c.windKt;
-        const fog = c.wxKind === "fog" || s.tempo?.wxKind === "fog" || (s.probWx || "").includes("FG");
-        return `<article class="box ${s.alert || "none"}">
-          <div class="box-head"><span>${s.localLabel}</span><span class="z">(${s.utcLabel})</span></div>
-          ${windRose(a.runways, c.windDir, c.windKt, true)}
-          <div class="grid">
-            <div><span class="fg">Vis </span>${formatVis(c.visM)}</div>
-            <div><span class="fg">Temp </span>${c.tempC != null ? Math.round(c.tempC) + "°" : "—"}</div>
-            <div><span class="fg">Clouds </span>${formatClouds(c.clouds, c.cavok)}</div>
-            <div><span class="fg">Dew </span>${c.dewC != null ? Math.round(c.dewC) + "°" : "—"}</div>
-            <div><span class="fg">Ceiling </span>${formatCeiling(c.ceilingFt, c.cavok)}</div>
-            <div>
-              <div class="${hot(strong(c.windKt))}">${formatWind(c.windKt, c.windDir)}</div>
-              ${showG ? `<div class="${hot(strong(c.gustKt))}">Gusting ${Math.round(c.gustKt)} kt</div>` : ""}
-            </div>
-            ${c.wx && c.wx !== "NSW" ? `<div style="grid-column:1/-1"><span class="fg">Weather </span>${decodeWx(c.wx)}</div>` : ""}
-          </div>
-          ${s.tempo ? eventLine("TEMPO", s.tempo) : ""}
-          ${s.prob && s.probCond ? eventLine("PROB" + s.prob, s.probCond) : ""}
-          ${fog ? `<p class="warn">Fog warning</p>` : ""}
-        </article>`;
-      }).join("");
-      const fl = (flights || []).map((f) => f.onGround ? `${f.callsign} on ground` : f.callsign);
-      return `<section class="row ${a.rowAlert || "none"}">
-        <div class="row-head">
-          <p class="name">${a.iata} <span class="icao">${a.icao}</span> ${a.name}</p>
-          ${clockHtml(a.tz, "clk-" + a.icao)}
-          ${m.fltCat ? `<span class="badge ${m.fltCat}">${m.fltCat}</span>` : ""}
-          ${m.model ? `<span class="age">No METAR · model</span>` : m.ageMin != null ? `<span class="age ${m.ageMin >= 60 ? "stale" : ""}">METAR ${m.ageMin} min ago</span>` : ""}
-        </div>
-        <div class="body">
-          <div class="now">
-            ${windRose(a.runways, m.windDir, m.windKt, false)}
-            <div class="grid" style="margin-top:8px;font-size:14px">
-              <div>
-                <div class="${hot(strong(m.windKt))}">${formatWind(m.windKt, m.windDir)}</div>
-                ${showGust ? `<div class="${hot(strong(m.gustKt))}">Gusting ${Math.round(m.gustKt)} kt</div>` : ""}
-                <div><span class="fg">Vis </span>${formatVis(m.visM)}</div>
-                <div><span class="fg">Clouds </span>${formatClouds(m.clouds, cavok)}</div>
-                ${wxWords ? `<div><span class="fg">Weather </span>${wxWords}</div>` : ""}
-              </div>
-              <div>
-                <div><span class="fg">Ceiling </span>${formatCeiling(m.ceilingFt, cavok)}</div>
-                <div><span class="fg">Temp </span>${m.tempC != null ? Math.round(m.tempC) + "°" : "—"}</div>
-                <div><span class="fg">Dew </span>${m.dewC != null ? Math.round(m.dewC) + "°" : "—"}</div>
-              </div>
-            </div>
-          </div>
-          <div class="boxes">
-            ${a.tafDown ? `<div class="tafdown">TAF down<br>model forecast</div>` : ""}
-            ${boxes}
-          </div>
-        </div>
-        ${m.raw ? `<p class="raw">${m.raw}</p>` : ""}
-        ${fl.length ? `<p class="adsb"><strong>In range 400 km </strong>${fl.join(" · ")}</p>` : ""}
-      </section>`;
-    }
-
-    let weather = null, flights = { byAirport: {} };
-    let offset = 0, pausedUntil = 0;
-
-    function paint() {
-      const airports = weather?.airports || [];
-      const html = airports.map((a) => renderAirport(a, flights.byAirport?.[a.iata] || [])).join("");
-      const track = document.getElementById("track");
-      track.innerHTML = `<div class="pad" id="first">${html}</div><div class="pad" aria-hidden="true">${html}</div>`;
-      const upd = document.getElementById("updated");
-      if (weather?.fetchedAt) {
-        const t = new Date(weather.fetchedAt);
-        const hh = String(t.getUTCHours()).padStart(2,"0");
-        const mm = String(t.getUTCMinutes()).padStart(2,"0");
-        upd.textContent = `Updated ${hh}:${mm} UTC · ${weather.tafDown ? "TAF down · retry 2 min · METAR live" : "refresh 5 min · official TAF / METAR"}`;
-      }
-      const anyDown = !!(weather?.tafDown || (weather?.airports || []).some((a) => a.tafDown));
-      const banner = document.getElementById("banner");
-      banner.hidden = !anyDown;
-      if (anyDown) {
-        banner.textContent = weather?.tafDown ? "TAF down — retrying every 2 minutes" : "TAF down at one airport — model forecast in use";
-      }
-      tickClocks();
-    }
-
-    async function load() {
-      try {
-        const [w, f] = await Promise.all([
-          fetch("/api/weather?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()),
-          fetch("/api/flights?t=" + Date.now(), { cache: "no-store" }).then((r) => r.json()).catch(() => ({ byAirport: {} })),
-        ]);
-        if (!w?.airports?.length) throw new Error(w?.error || "weather payload missing");
-        weather = w;
-        flights = f;
-        const banner = document.getElementById("banner");
-        const anyDown = !!(w.tafDown || w.airports.some((a) => a.tafDown));
-        banner.hidden = !anyDown;
-        banner.textContent = w.tafDown ? "TAF down — retrying every 2 minutes" : "TAF down at one airport — model forecast in use";
-        paint();
-      } catch (e) {
-        document.getElementById("banner").hidden = false;
-        document.getElementById("banner").textContent = "Weather feed error — retrying";
-        document.getElementById("updated").textContent = "Could not load weather";
-        if (!weather) weather = { tafDown: true, airports: [] };
-      }
-    }
-
-    document.getElementById("refresh").onclick = () => load();
-    setInterval(tickClocks, 1000);
-    function schedule() {
-      const failed = !weather?.airports?.length;
-      const anyTafDown = failed || !!(weather?.tafDown || (weather?.airports || []).some((a) => a.tafDown));
-      const ms = failed ? 15 * 1000 : anyTafDown ? 2 * 60 * 1000 : 5 * 60 * 1000;
-      setTimeout(async () => { await load(); schedule(); }, ms);
-    }
-    async function hardRefresh() {
-      try {
-        if (window.caches) {
-          const keys = await caches.keys();
-          await Promise.all(keys.map((k) => caches.delete(k)));
-        }
-      } catch (_) {}
-      const url = new URL(location.href);
-      url.searchParams.set("r", String(Date.now()));
-      location.replace(url.toString());
-    }
-    setTimeout(hardRefresh, 5 * 60 * 1000);
-    (function scroll() {
-      const root = document.querySelector(".track");
-      const tick = () => {
-        const copy = document.getElementById("first");
-        if (copy && Date.now() > pausedUntil) {
-          const h = copy.offsetHeight;
-          if (h > 0) {
-            offset += 0.28;
-            if (offset >= h) offset -= h;
-            root.style.transform = `translateY(${-offset}px)`;
-          }
-        }
-        requestAnimationFrame(tick);
-      };
-      requestAnimationFrame(tick);
-      const pause = () => { pausedUntil = Date.now() + 6000; };
-      window.addEventListener("pointerdown", pause);
-      window.addEventListener("wheel", pause, { passive: true });
-    })();
-    if (navigator.wakeLock) navigator.wakeLock.request("screen").catch(() => {});
-    load().then(schedule);
-  </script>
+  <main id="content"><div class="loading">Loading…</div></main>
+  <footer>
+    <span>Weather in the browser only (no ADS-B Worker). METAR/TAF when available; 3-hour boxes are MODEL (Open-Meteo / met.no). One TV tab. Not for operational use — use Airservices/NAIPS for dispatch.</span>
+    <span id="lastUpdated"></span>
+  </footer>
+  <script src="./app.js"></script>
 </body>
 </html>
