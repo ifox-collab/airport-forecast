@@ -66,6 +66,17 @@
     .rose { width: 168px; height: 168px; margin: 0 auto; position: relative; }
     .rose.sm { width: 132px; height: 132px; }
     .rose svg { width: 100%; height: 100%; }
+    .wind-track { stroke: #4ade80; stroke-width: 2; stroke-dasharray: 4 6; opacity: .35; }
+    .wind-arrow { animation: windSlide 2.4s linear infinite; }
+    @keyframes windSlide {
+      0% { transform: translateY(-40px); opacity: 0; }
+      12% { opacity: 1; }
+      86% { opacity: 1; }
+      100% { transform: translateY(120px); opacity: 0; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .wind-arrow { animation: none; }
+    }
     .pill {
       position: absolute; left: 50%; bottom: 2px; transform: translateX(-50%);
       background: #0b1a12; color: #d1fae5; border-radius: 999px; padding: 1px 8px;
@@ -84,6 +95,6 @@
   </header>
   <div id="banner" class="banner" hidden></div>
   <div class="scroller"><div class="track" id="track"></div></div>
-  <script src="./app.js?v=rose2"></script>
+  <script src="./app.js?v=rose3"></script>
 </body>
 </html>
