@@ -20,7 +20,10 @@
       display: flex; align-items: center; justify-content: space-between; gap: 12px;
       padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); flex-shrink: 0;
     }
-    header h1 { font-family: "Barlow Condensed", sans-serif; font-size: 22px; font-weight: 600; }
+    header h1 { font-family: "Barlow Condensed", sans-serif; font-size: 22px; font-weight: 600; white-space: nowrap; }
+    .title-row { display: flex; align-items: center; gap: 12px; min-width: 0; flex: 1; }
+    .stage { position: relative; flex: 1; height: 72px; min-width: 120px; overflow: hidden; }
+    .stage canvas { width: 100%; height: 72px; display: block; }
     .updated { font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
     button {
       width: 40px; height: 40px; border-radius: 8px; border: 1px solid var(--border);
@@ -67,7 +70,7 @@
     .rose.sm { width: 132px; height: 132px; }
     .rose svg { width: 100%; height: 100%; }
     .wind-track { stroke: #4ade80; stroke-width: 2; stroke-dasharray: 4 6; opacity: .35; }
-    .wind-arrow { animation: windSlide 2.4s linear infinite; }
+    .wind-arrow { animation: windSlide 2.4s infinite; }
     @keyframes windSlide {
       0% { transform: translateY(-40px); opacity: 0; }
       12% { opacity: 1; }
@@ -87,7 +90,10 @@
 </head>
 <body>
   <header>
-    <div><h1>Airport weather board</h1></div>
+    <div class="title-row">
+      <h1>Airport weather board</h1>
+      <div class="stage"><canvas id="c" width="800" height="72"></canvas></div>
+    </div>
     <div style="display:flex;align-items:center;gap:12px">
       <p class="updated" id="updated">Loading…</p>
       <button type="button" id="refresh" title="Refresh">↻</button>
@@ -95,6 +101,7 @@
   </header>
   <div id="banner" class="banner" hidden></div>
   <div class="scroller"><div class="track" id="track"></div></div>
-  <script src="./app.js?v=rose4"></script>
+  <script src="./app.js?v=rose5"></script>
+  <script src="./dancers.js?v=rose5"></script>
 </body>
 </html>
