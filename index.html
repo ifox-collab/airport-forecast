@@ -2,121 +2,13 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Airport Forecast Board · METAR + TAF + Model</title>
-  <style>
-    :root {
-      --bg: #0b0f14; --surface: #141a22; --surface2: #1c2430; --border: #2a3544;
-      --text: #e8eef6; --muted: #8b9bb4; --accent: #3b82f6; --good: #22c55e;
-      --warn: #eab308; --bad: #ef4444;
-    }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { height: 100%; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
-    body { display: flex; flex-direction: column; min-height: 100vh; }
-    header {
-      background: #0f1520; border-bottom: 1px solid var(--border); padding: 6px 14px;
-      display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-shrink: 0;
-    }
-    header h1 { font-size: 1.05rem; font-weight: 600; }
-    .controls { display: flex; align-items: center; gap: 10px; }
-    button {
-      background: var(--accent); color: #fff; border: none; padding: 7px 14px;
-      border-radius: 6px; font-size: 0.88rem; cursor: pointer;
-    }
-    button:disabled { opacity: 0.5; }
-    .status { font-size: 0.82rem; color: var(--muted); }
-    .status.error { color: var(--bad); }
-    .status.stale { color: var(--warn); }
-    main { flex: 1; }
-    .loading { text-align: center; padding: 40px; color: var(--muted); }
-
-    .airport { border-bottom: 1px solid var(--border); background: var(--surface); }
-    .airport.alert-high { animation: police-red 0.9s infinite; border-left: 6px solid #ef4444; }
-    .airport.alert-medium { animation: police-amber 1.1s infinite; border-left: 6px solid #eab308; }
-    @keyframes police-red {
-      0%, 100% { background: #1f0a0a; box-shadow: inset 0 0 0 4px #ef4444; }
-      50% { background: #3b1010; box-shadow: inset 0 0 0 6px #ff1a1a; }
-    }
-    @keyframes police-amber {
-      0%, 100% { background: #1f1a08; box-shadow: inset 0 0 0 4px #eab308; }
-      50% { background: #3b3010; box-shadow: inset 0 0 0 6px #facc15; }
-    }
-    .airport-header {
-      background: var(--surface2); padding: 7px 12px; font-weight: 600; font-size: 1.1rem;
-      border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 10px; flex-wrap: nowrap;
-    }
-    .airport-header .left { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
-    .icao { color: var(--accent); font-size: 1.15rem; flex-shrink: 0; }
-    .name { color: #fff; font-weight: 400; flex-shrink: 0; white-space: nowrap; }
-    .fltcat {
-      font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 4px;
-      letter-spacing: 0.03em; flex-shrink: 0; margin-left: 8px;
-    }
-    .fltcat.VFR { background: #22c55e; color: #0b0f14; }
-    .fltcat.MVFR { background: #3b82f6; color: #fff; }
-    .fltcat.IFR { background: #eab308; color: #0b0f14; }
-    .fltcat.LIFR { background: #ef4444; color: #fff; }
-    .metar-strip { background: #0d1219; border-bottom: 1px solid var(--border); padding: 5px 12px; font-size: 0.82rem; }
-    .metar-decoded { display: flex; flex-wrap: wrap; gap: 10px 16px; }
-    .metar-item strong { color: var(--muted); font-weight: 500; margin-right: 4px; }
-    .src-badge {
-      font-size: 0.68rem; font-weight: 700; padding: 1px 6px; border-radius: 3px;
-      letter-spacing: 0.04em; margin-left: 4px; vertical-align: middle;
-    }
-    .src-badge.model { background: #334155; color: #cbd5e1; }
-    .src-badge.taf { background: #1e3a5f; color: #93c5fd; }
-    .src-badge.metar { background: #14532d; color: #86efac; }
-    .src-badge.stale { background: #713f12; color: #fde68a; }
-    .taf-line { color: #93c5fd; margin-top: 3px; }
-    .metar-raw { font-family: ui-monospace, monospace; font-size: 0.72rem; color: var(--muted); margin-top: 4px; }
-    .timeline { display: flex; overflow-x: auto; padding: 4px 6px 6px; gap: 3px; }
-    .slot {
-      flex: 0 0 180px; min-height: 120px; background: var(--bg); border: 1px solid var(--border);
-      border-radius: 8px; padding: 8px 7px; text-align: center; font-size: 0.9rem;
-    }
-    .slot.now { border-color: var(--accent); }
-    .slot.alert-high { animation: box-red 0.9s infinite; border-width: 3px; }
-    .slot.alert-medium { animation: box-amber 1.1s infinite; border-width: 3px; }
-    @keyframes box-red {
-      0%, 100% { border-color: #ef4444; background: #1a0a0a; }
-      50% { border-color: #ff2020; background: #2f0c0c; }
-    }
-    @keyframes box-amber {
-      0%, 100% { border-color: #eab308; background: #1a1608; }
-      50% { border-color: #facc15; background: #2f280c; }
-    }
-    .slot-time { font-size: 0.72rem; color: var(--muted); font-weight: 600; margin-bottom: 4px; }
-    .wx-icon { font-size: 1.6rem; display: block; margin: 2px 0; }
-    .wind-row { font-weight: 600; font-size: 1.05rem; }
-    .wind.low { color: var(--good); } .wind.med { color: var(--warn); } .wind.high { color: var(--bad); }
-    .gust { font-size: 0.8rem; color: var(--muted); }
-    .temp-row { margin-top: 4px; }
-    .dew { color: var(--muted); font-size: 0.78rem; }
-    .vis { font-size: 0.85rem; margin-top: 3px; }
-    .vis.poor { color: var(--bad); font-weight: 600; }
-    .cloud { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
-    .warn-text { margin-top: 4px; font-size: 0.72rem; font-weight: 700; padding: 2px 4px; border-radius: 3px; }
-    .warn-text.high { background: rgba(239,68,68,0.25); color: #fca5a5; }
-    .warn-text.medium { background: rgba(234,179,8,0.22); color: #fde68a; }
-    footer {
-      padding: 4px 12px; border-top: 1px solid var(--border); font-size: 0.72rem; color: var(--muted);
-      display: flex; justify-content: space-between; flex-wrap: wrap; gap: 6px; flex-shrink: 0;
-    }
-  </style>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Airport weather board</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600;700&display=swap" />
 </head>
 <body>
-  <header>
-    <h1>Airport Forecast Board · METAR / TAF + model tiles</h1>
-    <div class="controls">
-      <span class="status" id="status">Loading…</span>
-      <button id="refreshBtn" type="button">Refresh</button>
-    </div>
-  </header>
-  <main id="content"><div class="loading">Loading…</div></main>
-  <footer>
-    <span>Weather in the browser only (no ADS-B Worker). METAR/TAF when available; 3-hour boxes are MODEL (Open-Meteo / met.no). One TV tab. Not for operational use — use Airservices/NAIPS for dispatch.</span>
-    <span id="lastUpdated"></span>
-  </footer>
-  <script src="./app.js"></script>
+  <p>See public/index.html</p>
+  <script>location.replace('./public/index.html');</script>
 </body>
 </html>
