@@ -83,7 +83,7 @@ function windRose(runways, dir, kt, compact) {
   const arrow = (numDir == null || !Number.isFinite(numDir)) ? "" : (
     '<g transform="rotate('+numDir+' '+cx+' '+cy+')">'
     + '<line class="wind-track" x1="'+cx+'" y1="'+(cy-88)+'" x2="'+cx+'" y2="'+(cy+88)+'" />'
-    + '<g class="wind-arrow"><path d="M '+cx+' '+(cy-10)+' L '+(cx-11)+' '+(cy-32)+' L '+(cx-4)+' '+(cy-32)+' L '+(cx-4)+' '+(cy-52)+' L '+(cx+4)+' '+(cy-52)+' L '+(cx+4)+' '+(cy-32)+' L '+(cx+11)+' '+(cy-32)+' Z" fill="#4ade80" stroke="#166534" /></g>'
+    + '<g class="wind-arrow"><animateTransform attributeName="transform" type="translate" from="0 -46" to="0 130" dur="2.4s" repeatCount="indefinite"/><path d="M '+cx+' '+(cy-8)+' L '+(cx-11)+' '+(cy-30)+' L '+(cx-4)+' '+(cy-30)+' L '+(cx-4)+' '+(cy-52)+' L '+(cx+4)+' '+(cy-52)+' L '+(cx+4)+' '+(cy-30)+' L '+(cx+11)+' '+(cy-30)+' Z" fill="#4ade80" stroke="#166534"/></g>'
     + '</g>'
   );
   const pill = (!compact && numDir != null && kt != null) ? '<div class="pill">'+Math.round(numDir)+'\u00b0 '+Math.round(kt)+' kt</div>' : "";
