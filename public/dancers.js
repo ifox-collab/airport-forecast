@@ -26,44 +26,81 @@ function drawHead(x, y, color, tilt, look) {
   ctx.strokeStyle = color; ctx.lineWidth = 2.4;
   ctx.beginPath(); ctx.arc(x + tilt * 2 + look * 6, y + 2, 8, 0.2, Math.PI - 0.2, false); ctx.stroke();
 }
+function joints(ulL, ulR, uaL, uaR) {
+  const bL = 0.28 + Math.max(0, ulL) * 1.15 + Math.max(0, -ulL) * 0.2;
+  const bR = 0.28 + Math.max(0, ulR) * 1.15 + Math.max(0, -ulR) * 0.2;
+  return { ulL: ulL, llL: ulL - bL, ulR: ulR, llR: ulR - bR, uaL: uaL, laL: uaL * 0.22, uaR: uaR, laR: uaR * 0.22 };
+}
 function poseWalk(t) {
-  const s = Math.sin(t * Math.PI * 2), a = s;
-  return { hipY: Math.abs(s) * 3, tilt: 0.16, spin: 0, look: 0, uaL: 0.85 + a * 0.45, laL: 0.5, uaR: 0.15 - a * 0.45, laR: 0.45, ulL: -0.12 - a * 0.38, llL: 0.5 + Math.max(0, a) * 0.55, ulR: 0.42 + a * 0.55, llR: 0.35 + Math.max(0, -a) * 0.6 };
+  const w = t * Math.PI * 2, sl = Math.sin(w), sr = Math.sin(w + Math.PI);
+  const j = joints(0.42 * sl, 0.42 * sr, 0.5 * sr, 0.5 * sl);
+  return Object.assign({ hipY: Math.abs(sl) * 3.2, tilt: 0.12, spin: 0, look: 0 }, j);
 }
 function poseRun(t, look) {
-  const s = Math.sin(t * Math.PI * 2), a = s;
-  return { hipY: Math.abs(s) * 4, tilt: 0.22, spin: 0, look: look || 0, uaL: 0.95 + a * 0.7, laL: 0.55, uaR: 0.05 - a * 0.7, laR: 0.5, ulL: -0.15 - a * 0.55, llL: 0.35 + Math.max(0, a) * 0.85, ulR: 0.55 + a * 0.7, llR: 0.2 + Math.max(0, -a) * 0.9 };
+  const w = t * Math.PI * 2, sl = Math.sin(w), sr = Math.sin(w + Math.PI);
+  const j = joints(0.62 * sl, 0.62 * sr, 0.75 * sr, 0.75 * sl);
+  j.llL -= Math.max(0, sl) * 0.25; j.llR -= Math.max(0, sr) * 0.25;
+  return Object.assign({ hipY: Math.abs(sl) * 5, tilt: 0.2, spin: 0, look: look || 0 }, j);
 }
 function poseStand(look, breath) {
-  return { hipY: breath || 0, tilt: 0.04, spin: 0, look: look || 0, uaL: 0.25, laL: 0.2, uaR: 0.2, laR: 0.2, ulL: 0.08, llL: 0.12, ulR: -0.05, llR: 0.12 };
+  return Object.assign({ hipY: breath || 0, tilt: 0.04, spin: 0, look: look || 0 }, joints(0.08, -0.06, 0.18, 0.12));
 }
 function poseBarrel(ph) {
-  return { hipY: 8 + Math.sin(ph * Math.PI) * 42, tilt: 0, spin: ph * Math.PI * 2, look: 0, uaL: 1.3, laL: 0.35, uaR: -0.2, laR: 0.9, ulL: 0.6, llL: 0.35, ulR: -0.4, llR: 0.5 };
+  const w = ph * Math.PI * 2;
+  return Object.assign({ hipY: 8 + Math.sin(ph * Math.PI) * 42, tilt: 0, spin: w, look: 0 }, joints(0.5 * Math.sin(w), -0.4 * Math.cos(w), 0.8, -0.3));
 }
 function poseConor(t, facing) {
-  const s = Math.sin(t * Math.PI * 2), a = s * facing;
-  return { hipY: 1.5 + Math.abs(s) * 3.2, tilt: 0.08 * facing, spin: 0, look: 0.1 * facing, uaL: 0.55 + a * 0.35, laL: 0.55, uaR: 0.28 - a * 0.35, laR: 0.5, ulL: -0.06 - a * 0.18, llL: 0.28, ulR: 0.22 + a * 0.28, llR: 0.24 };
+  const w = t * Math.PI * 2, sl = Math.sin(w) * facing, sr = Math.sin(w + Math.PI) * facing;
+  const j = joints(0.28 * sl, 0.28 * sr, 0.38 * sr, 0.38 * sl);
+  return Object.assign({ hipY: 1.5 + Math.abs(Math.sin(w)) * 3.2, tilt: 0.08 * facing, spin: 0, look: 0.1 * facing }, j);
 }
 function poseGroup(move, t, who) {
   const w = t * Math.PI * 2, s = Math.sin(w), c = Math.cos(w);
   if (move === 0) return poseWalk(t);
-  if (move === 1) return { hipY: Math.abs(s) * 10, tilt: 0.2 + s * 0.08, spin: 0, look: 0, uaL: 0.35, laL: 0.5, uaR: 1.55 + s * 0.25, laR: 0.25, ulL: -0.15, llL: 0.7, ulR: 0.45 + Math.abs(s) * 0.25, llR: 0.55 };
-  if (move === 2) { const up = Math.max(0, -c); return { hipY: up * 16, tilt: 0.08, spin: 0, look: 0, uaL: 0.55 + up * 1.7, laL: 0.15, uaR: 0.9 + up * 1.9, laR: 0.1, ulL: -0.05 + up * 0.35, llL: 0.25, ulR: 0.25 + up * 0.55, llR: 0.2 }; }
-  if (move === 3) return { hipY: 2 + Math.abs(s) * 3, tilt: 0.22, spin: 0, look: 0, uaL: 1.1 + s * 0.3, laL: 0.35, uaR: 0.2 - s * 0.25, laR: 0.55, ulL: -0.2, llL: 0.45, ulR: 0.55 + s * 0.35, llR: 0.25 };
-  if (move === 4) return { hipY: 8 + (1 - Math.cos(w)) * 6, tilt: 0, spin: w, look: 0, uaL: 0.6, laL: 0.4, uaR: 1.3, laR: 0.3, ulL: -0.2, llL: 0.4, ulR: 0.55, llR: 0.35 };
-  if (move === 5) return { hipY: Math.abs(s) * 6, tilt: 0.14, spin: 0, look: 0, uaL: 0.7 + s * 0.5, laL: 1.2, uaR: 1.1 - s * 0.5, laR: 1.2, ulL: -0.1, llL: 0.55, ulR: 0.35 + Math.abs(s) * 0.2, llR: 0.5 };
-  if (move === 6) return { hipY: Math.abs(s) * 8, tilt: 0.2, spin: 0, look: 0, uaL: 0.35, laL: 0.45, uaR: 2.55 + s * 0.12, laR: 0.05, ulL: -0.15, llL: 0.55, ulR: 0.4, llR: 0.45 };
-  if (move === 7) { const down = c * 0.5 + 0.5; return { hipY: 6 + down * 14, tilt: 0.12, spin: 0, look: 0, uaL: 0.55, laL: 0.9, uaR: 0.9, laR: 0.9, ulL: 0.35 + down * 0.45, llL: 0.9 + down * 0.25, ulR: 0.55 + down * 0.35, llR: 0.9 + down * 0.25 }; }
-  if (move === 8) { const k = Math.sin(w + who * 0.35); return { hipY: 10 + k * 10, tilt: 0.25 + k * 0.2, spin: 0.15, look: 0, uaL: 0.4, laL: 0.3, uaR: 1.6, laR: 0.2, ulL: 0.15, llL: 0.3, ulR: 0.9, llR: 0.2 }; }
-  return { hipY: Math.abs(s) * 4, tilt: 0.18, spin: 0, look: 0, uaL: 0.45, laL: 0.25, uaR: 1.4, laR: 0.15, ulL: -0.05, llL: 0.4, ulR: 0.35 + Math.max(0, s) * 1.45, llR: 0.12 };
+  if (move === 1) {
+    const j = joints(0.35 * s, 0.2 + Math.abs(s) * 0.35, 0.2, 1.1 + s * 0.35); j.laR = 0.25;
+    return Object.assign({ hipY: Math.abs(s) * 10, tilt: 0.18, spin: 0, look: 0 }, j);
+  }
+  if (move === 2) {
+    const up = Math.max(0, -c);
+    const j = joints(-0.05 + up * 0.3, 0.2 + up * 0.45, 0.4 + up * 1.4, 0.6 + up * 1.5); j.laL = 0.15; j.laR = 0.12;
+    return Object.assign({ hipY: up * 16, tilt: 0.08, spin: 0, look: 0 }, j);
+  }
+  if (move === 3) return Object.assign({ hipY: 2 + Math.abs(s) * 3, tilt: 0.2, spin: 0, look: 0 }, joints(-0.2 + s * 0.15, 0.45 + s * 0.3, 0.9 + s * 0.25, 0.15 - s * 0.2));
+  if (move === 4) return Object.assign({ hipY: 8 + (1 - c) * 6, tilt: 0, spin: w, look: 0 }, joints(-0.15, 0.4, 0.5, 1.0));
+  if (move === 5) {
+    const j = joints(-0.12, 0.3 + Math.abs(s) * 0.2, 0.55 + s * 0.4, 0.85 - s * 0.4); j.laL = -0.2; j.laR = 0.15;
+    return Object.assign({ hipY: Math.abs(s) * 6, tilt: 0.14, spin: 0, look: 0 }, j);
+  }
+  if (move === 6) {
+    const j = joints(-0.15, 0.35, 0.25, 1.7 + s * 0.15); j.laR = 0.2;
+    return Object.assign({ hipY: Math.abs(s) * 8, tilt: 0.18, spin: 0, look: 0 }, j);
+  }
+  if (move === 7) {
+    const down = c * 0.5 + 0.5;
+    return Object.assign({ hipY: 6 + down * 14, tilt: 0.12, spin: 0, look: 0 }, joints(0.3 + down * 0.4, 0.45 + down * 0.3, 0.45, 0.7));
+  }
+  if (move === 8) {
+    const k = Math.sin(w + who * 0.35);
+    return Object.assign({ hipY: 10 + k * 10, tilt: 0.22 + k * 0.15, spin: 0.12, look: 0 }, joints(0.12, 0.7, 0.35, 1.2));
+  }
+  const j = joints(-0.08, 0.3 + Math.max(0, s) * 1.1, 0.35, 1.15); j.llR = 0.15;
+  return Object.assign({ hipY: Math.abs(s) * 4, tilt: 0.16, spin: 0, look: 0 }, j);
 }
 function poseCool(who, t) {
   const w = t * Math.PI * 2, s = Math.sin(w), c = Math.cos(w);
   const set = who % 4;
-  if (set === 0) return { hipY: 8 + (1 - c) * 10, tilt: 0, spin: w * 0.5, look: 0, uaL: 1.8, laL: 0.3, uaR: -0.2, laR: 1.2, ulL: 0.9, llL: 0.4, ulR: -0.3, llR: 0.9 };
-  if (set === 1) { const up = Math.max(0, -c) * 12; return { hipY: up, tilt: 0.1, spin: 0, look: 0, uaL: 0.4 + s * 1.2, laL: 0.8, uaR: 2.2, laR: 0.1, ulL: 0.2, llL: 0.4, ulR: 0.5, llR: 0.3 }; }
-  if (set === 2) return { hipY: Math.abs(s) * 8, tilt: 0.2, spin: s * 0.4, look: 0.4, uaL: 0.3, laL: 0.4, uaR: 2.4, laR: 0.1, ulL: -0.1, llL: 0.4, ulR: 0.3 + Math.max(0, s) * 1.5, llR: 0.1 };
-  return { hipY: 12 + s * 10, tilt: 0.3, spin: 0.2, look: 0, uaL: 0.5, laL: 0.3, uaR: 1.5, laR: 0.2, ulL: 0.2, llL: 0.25, ulR: 0.85, llR: 0.2 };
+  if (set === 0) return Object.assign({ hipY: 8 + (1 - c) * 10, tilt: 0, spin: w * 0.5, look: 0 }, joints(0.7, -0.25, 1.3, -0.15));
+  if (set === 1) {
+    const up = Math.max(0, -c) * 12;
+    const j = joints(0.15, 0.4, 0.35 + s * 0.9, 1.5); j.laR = 0.2;
+    return Object.assign({ hipY: up, tilt: 0.1, spin: 0, look: 0 }, j);
+  }
+  if (set === 2) {
+    const j = joints(-0.1, 0.25 + Math.max(0, s) * 1.2, 0.25, 1.6); j.llR = 0.12; j.laR = 0.15;
+    return Object.assign({ hipY: Math.abs(s) * 8, tilt: 0.18, spin: s * 0.3, look: 0.3 }, j);
+  }
+  return Object.assign({ hipY: 12 + s * 10, tilt: 0.25, spin: 0.15, look: 0 }, joints(0.15, 0.7, 0.4, 1.15));
 }
 function drawDude(x, ground, color, p) {
   const hipX = x, hipY = ground - 34 + p.hipY;
@@ -72,12 +109,12 @@ function drawDude(x, ground, color, p) {
   drawHead(hipX, headY, color, p.tilt, p.look || 0);
   ctx.strokeStyle = color; ctx.lineWidth = 3.2;
   ctx.beginPath(); ctx.moveTo(hipX, neckY); ctx.lineTo(hipX, hipY); ctx.stroke();
-  const eL = limb(hipX, neckY + 6, p.uaL, 14), hL = limb(eL[0], eL[1], p.uaL + p.laL, 12);
-  const eR = limb(hipX, neckY + 6, p.uaR, 14), hR = limb(eR[0], eR[1], p.uaR + p.laR, 12);
+  const eL = limb(hipX, neckY + 6, p.uaL, 14), hL = limb(eL[0], eL[1], p.laL, 12);
+  const eR = limb(hipX, neckY + 6, p.uaR, 14), hR = limb(eR[0], eR[1], p.laR, 12);
   ctx.beginPath(); ctx.moveTo(hipX, neckY + 6); ctx.lineTo(eL[0], eL[1]); ctx.lineTo(hL[0], hL[1]); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(hipX, neckY + 6); ctx.lineTo(eR[0], eR[1]); ctx.lineTo(hR[0], hR[1]); ctx.stroke();
-  const kL = limb(hipX, hipY, p.ulL, 16), fL = limb(kL[0], kL[1], p.ulL + p.llL, 16);
-  const kR = limb(hipX, hipY, p.ulR, 16), fR = limb(kR[0], kR[1], p.ulR + p.llR, 16);
+  const kL = limb(hipX, hipY, p.ulL, 16), fL = limb(kL[0], kL[1], p.llL, 16);
+  const kR = limb(hipX, hipY, p.ulR, 16), fR = limb(kR[0], kR[1], p.llR, 16);
   ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(kL[0], kL[1]); ctx.lineTo(fL[0], fL[1]); ctx.stroke();
   ctx.beginPath(); ctx.moveTo(hipX, hipY); ctx.lineTo(kR[0], kR[1]); ctx.lineTo(fR[0], fR[1]); ctx.stroke();
   ctx.restore();
