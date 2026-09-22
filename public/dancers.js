@@ -84,8 +84,8 @@ function drawDude(x, ground, color, p) {
 }
 const PHASES = [];
 function add(type, dur, extra) { PHASES.push(Object.assign({ type: type, dur: dur }, extra || {})); }
-add("run1", 8); add("wait", 60); add("run2", 14); add("wait", 15); add("run3", 13); add("wait", 10); add("run4", 18);
-for (let i = 0; i < 20; i++) { add("dance", 10, { move: i % 10, cool: i >= 10 }); add("swagger", 10, { who: i % 4 }); }
+add("run1", 12); add("wait", 60); add("run2", 20); add("wait", 15); add("run3", 18); add("wait", 10); add("run4", 26);
+for (let i = 0; i < 20; i++) { add("dance", 14, { move: i % 10, cool: i >= 10 }); add("swagger", 14, { who: i % 4 }); }
 const LOOP = PHASES.reduce(function(s, p) { return s + p.dur; }, 0);
 function at(sec) {
   let t = ((sec % LOOP) + LOOP) % LOOP;
@@ -102,38 +102,38 @@ function frame(now) {
   const scale = 72 / 130; ctx.scale(scale, scale);
   const w = cssW / scale, ground = 118;
   const hit = at((now - start) / 1000), phase = hit.phase, local = hit.local, type = phase.type;
-  if (type === "run1") drawDude(lerp(-80, w + 80, local / phase.dur), ground, COLORS[0], poseRun(local / 0.5, Math.sin(local * 3)));
+  if (type === "run1") drawDude(lerp(-80, w + 80, local / phase.dur), ground, COLORS[0], poseRun(local / 0.7, Math.sin(local * 3)));
   else if (type === "run2") {
     var x, p;
-    if (local < 3) { x = lerp(-80, w * 0.45, local / 3); p = poseRun(local / 0.5); }
+    if (local < 3) { x = lerp(-80, w * 0.45, local / 3); p = poseRun(local / 0.7); }
     else if (local < 5.4) { var ph = (local - 3) / 2.4; x = lerp(w * 0.45, w * 0.82, ph); p = poseBarrel(ph); }
     else if (local < 8.4) { x = w * 0.82; p = poseStand(0, Math.sin((local - 5.4) * 4) * 2); }
-    else { x = lerp(w * 0.82, w + 80, (local - 8.4) / 5.6); p = poseRun((local - 8.4) / 0.5); }
+    else { x = lerp(w * 0.82, w + 80, (local - 8.4) / 5.6); p = poseRun((local - 8.4) / 0.7); }
     drawDude(x, ground, COLORS[1], p);
   } else if (type === "run3") {
     var x3, p3;
-    if (local < 2.2) { x3 = lerp(-80, w * 0.5, local / 2.2); p3 = poseRun(local / 0.5); }
+    if (local < 2.2) { x3 = lerp(-80, w * 0.5, local / 2.2); p3 = poseRun(local / 0.7); }
     else if (local < 7.2) { x3 = w * 0.5; p3 = poseStand(Math.sin((local - 2.2) * 2.2) * 1.2, 0); }
-    else { x3 = lerp(w * 0.5, w + 80, (local - 7.2) / 5.8); p3 = poseWalk((local - 7.2) / 0.9); }
+    else { x3 = lerp(w * 0.5, w + 80, (local - 7.2) / 5.8); p3 = poseWalk((local - 7.2) / 1.3); }
     drawDude(x3, ground, COLORS[2], p3);
   } else if (type === "run4") {
     var x4, p4;
-    if (local < 5) { x4 = lerp(-80, w * 0.5, local / 5); p4 = poseConor(local / 1.15, 1); }
+    if (local < 5) { x4 = lerp(-80, w * 0.5, local / 5); p4 = poseConor(local / 1.6, 1); }
     else if (local < 7) { x4 = w * 0.5; p4 = poseConor(0.08, 1); p4.hipY = 1.5; }
-    else if (local < 11) { x4 = lerp(w * 0.5, 140, (local - 7) / 4); p4 = poseConor((local - 7) / 1.15, -1); }
-    else { x4 = lerp(140, w + 80, (local - 11) / 7); p4 = poseConor((local - 11) / 1.15, 1); }
+    else if (local < 11) { x4 = lerp(w * 0.5, 140, (local - 7) / 4); p4 = poseConor((local - 7) / 1.6, -1); }
+    else { x4 = lerp(140, w + 80, (local - 11) / 7); p4 = poseConor((local - 11) / 1.6, 1); }
     drawDude(x4, ground, COLORS[3], p4);
   } else if (type === "dance") {
-    var cycle = (local / 1.4) % 1;
+    var cycle = (local / 2.0) % 1;
     for (var i = 0; i < 4; i++) {
-      var delay = i * 0.35, age = local - delay;
+      var delay = i * 0.55, age = local - delay;
       if (age < 0) continue;
       var enter = Math.min(1, age / 0.55);
-      var xd = -90 + enter * 160 + i * 78 + Math.max(0, age - 0.7) * ((w + 200) / 12);
+      var xd = -50 + enter * 90 + i * 160 + Math.max(0, age - 1.0) * ((w + 40) / 18);
       drawDude(xd, ground, COLORS[i], phase.cool ? poseCool(i + phase.move, cycle) : poseGroup(phase.move, cycle, i));
     }
   } else if (type === "swagger") {
-    drawDude(lerp(-80, w + 80, local / phase.dur), ground, COLORS[phase.who], poseConor(local / 1.15, 1));
+    drawDude(lerp(-80, w + 80, local / phase.dur), ground, COLORS[phase.who], poseConor(local / 1.6, 1));
   }
   requestAnimationFrame(frame);
 }
